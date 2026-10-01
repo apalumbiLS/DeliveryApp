@@ -1,8 +1,8 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Field } from "@/components/ui/field";
+import { BrandLockup } from "@/components/ui/brand-lockup";
 import { Input } from "@/components/ui/input";
-import { APP_MARK, APP_NAME } from "@/lib/brand";
 
 /**
  * Static frame for the real screen at /login. Rendered without a form action so
@@ -12,12 +12,7 @@ export function LoginScreen() {
   return (
     <div className="flex min-h-full flex-col items-center justify-center bg-card-muted px-5 py-10 font-sans">
       <div className="w-full max-w-sm">
-        <div className="mb-6 flex items-center justify-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-control bg-accent text-[13px] font-semibold text-accent-ink">
-            {APP_MARK}
-          </div>
-          <span className="text-[15px] font-semibold text-ink">{APP_NAME}</span>
-        </div>
+        <BrandLockup className="mb-6 justify-center" />
 
         <Card className="p-6">
           <h1 className="text-[17px] font-semibold tracking-tight text-ink">
