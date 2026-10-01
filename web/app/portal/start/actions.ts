@@ -1,5 +1,6 @@
 "use server";
 
+import { normalizeZip } from "@/lib/geo";
 import { requireCustomer } from "@/lib/portal/require-customer";
 import { isRetailerId } from "@/lib/retailers";
 
@@ -73,6 +74,9 @@ export async function saveOrderIntent(
 
   let siteId: string;
   let address: DeliveryAddress;
+  // Only the "new address" branch can set this — a saved site already has, or
+  // has not, coordinates of its own.
+  let centroid: { lat: number; lng: number } | null = null;
 
   if (input.site.kind === "saved") {
     const { data: siteData } = await supabase
@@ -113,6 +117,20 @@ export async function saveOrderIntent(
       return { ok: false, error: "Fill in the address before continuing." };
     }
 
+    // A ZIP centroid, not a geocode. It is free and instant, and good enough to
+    // rank stores by distance. A miss — a ZIP outside the seeded service area —
+    // leaves the coordinates null and the flow simply stops showing distances.
+    const zip = normalizeZip(address.postalCode);
+    if (zip) {
+      const { data: centroidData } = await supabase
+        .from("zip_centroids")
+        .select("lat, lng")
+        .eq("zip", zip)
+        .maybeSingle();
+
+      centroid = centroidData as unknown as { lat: number; lng: number } | null;
+    }
+
     // Reuse a site with the same address, so going back and forward — or a
     // retry after a failure — doesn't leave duplicates behind.
     const { data: existing } = await supabase
@@ -140,6 +158,8 @@ export async function saveOrderIntent(
           city: address.city,
           state: address.state,
           postal_code: address.postalCode,
+          lat: centroid?.lat ?? null,
+          lng: centroid?.lng ?? null,
         })
         .select("id")
         .single();

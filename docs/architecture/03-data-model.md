@@ -140,6 +140,21 @@ Seeded store list. The dispatcher picks from here — this is the only source of
 | `active`                                        | boolean NOT NULL DEFAULT true |                                     |
 |                                                 |                               | UNIQUE (`retailer`, `store_number`) |
 
+### `zip_centroids`
+
+Reference data, seeded alongside the store list: one centroid per ZIP, so an address a customer types can be ranked against nearby stores without a geocoding service.
+
+| Column        | Type                      | Notes                                                              |
+| ------------- | ------------------------- | ------------------------------------------------------------------ |
+| `zip`         | text PK                   | **Text, not an integer** — leading zeros are significant (`00501`)  |
+| `city`        | text                      |                                                                    |
+| `state`       | text                      |                                                                    |
+| `lat` / `lng` | double precision NOT NULL |                                                                    |
+
+A ZIP centroid is **not** the address: it is accurate to a couple of miles in a metro ZIP and can be tens of miles out in a large rural one. It is used for exactly one thing — ordering stores by distance in the start-an-order flow — and is deliberately not a geocoding service: no key, no billing, no network call. It has no foreign key to or from any other table.
+
+On a miss — a ZIP outside the seeded service area, or one created after the source data's vintage — `company_sites.lat`/`lng` are left null and the flow stops showing distances rather than failing.
+
 ### `inbound_emails`
 
 Every message that reaches the inbound webhook, stored before any interpretation.
@@ -384,6 +399,7 @@ RLS is enabled on every table in `public`. Policies are summarised here and spec
 | `profiles`                         | own row            | own row                                                | all        |
 | `company_sites`                    | own company (read, insert) | —                                              | all        |
 | `retailer_stores`                  | read               | read                                                   | all        |
+| `zip_centroids`                    | read               | read                                                   | all        |
 | `orders`                           | own company        | assigned only; open postings via the redacted function | all        |
 | `order_items`                      | via order          | via order                                              | all        |
 | `order_status_events`              | via order          | via order                                              | all        |
@@ -412,7 +428,7 @@ Schema changes are **versioned SQL files applied in order** — Flyway-style, no
 | `0002_<change>.sql`             | One incremental change.                                                                          |
 | `0003_<change>.sql`             | …and so on, one file per change, never a bulk re-write of what came before.                       |
 
-`0002_order_intents_and_store_urls.sql` is the first incremental change: it adds `order_intents`, the two `retailer_stores` columns above, and the customer insert policy on `company_sites`.
+`0002_order_intents_and_store_urls.sql` adds `order_intents`, the two `retailer_stores` columns above, and the customer insert policy on `company_sites`. `0003_zip_centroids.sql` adds the ZIP reference table.
 
 Naming is zero-padded four digits plus a short `snake_case` description: `0002_add_order_photos.sql`. The Supabase CLI's own matcher accepts any numeric prefix (`^([0-9]+)_(.*)\.sql$`), so this numbering works both by hand and with `supabase db push`.
 
@@ -436,6 +452,8 @@ The base script is deliberately **not** idempotent — a second run fails on the
 Reference rows that every environment needs (the `retailer_stores` list) live in `supabase/seed/`, are **idempotent** so they can be re-run safely, and are applied *after* migrations — never as part of them. A migration defines structure; a seed defines rows.
 
 `supabase/seed/0001_dev.sql` is the dev seed: one demo company and its two sites, the 118 North Carolina Lowe's stores from `External Notes/lowes-nc-stores.json` (with `store_url` and `store_label`), and four demo orders. It is **idempotent and corrective** — re-running refreshes the rows it owns rather than skipping them, which is what lets it backfill columns added by a later migration.
+
+`supabase/seed/0002_zip_centroids.sql` is **reference** data rather than demo data: 1,620 ZIP centroids for North and South Carolina, generated from `External Notes/ZIPGOLD.csv` (2011 vintage). It is scoped to the service area so the file stays small enough to apply through the SQL editor; a ZIP outside those states is a miss, which the flow handles. It is idempotent and corrective as well, so a newer source file can be dropped in and applied the same way.
 
 There is still no Home Depot list, so the seeded stores are Lowe's only. The portal derives which retailers to offer from the stores that exist, so seeding Home Depot later is a seed change and not a code change.
 

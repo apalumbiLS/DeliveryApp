@@ -163,6 +163,17 @@ create policy company_sites_customer_insert on company_sites for insert
 
 Policies for the same command are ORed, so this widens INSERT without touching dispatcher access — and a customer still cannot update or delete a site.
 
+`zip_centroids` follows the same read-everything, write-dispatchers shape as `retailer_stores`. Customers read it to turn a typed ZIP into coordinates; only a dispatcher — or the seed, which runs as the owner — may write it:
+
+```sql
+alter table zip_centroids enable row level security;
+
+create policy zip_centroids_select on zip_centroids for select
+  using (auth.uid() is not null);
+create policy zip_centroids_write on zip_centroids for all
+  using (is_dispatcher()) with check (is_dispatcher());
+```
+
 ### Orders
 
 ```sql

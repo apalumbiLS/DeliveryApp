@@ -28,3 +28,12 @@ export function distanceMiles(from: Point, to: Point) {
 export function formatDistance(miles: number) {
   return miles < 10 ? `${miles.toFixed(1)} mi` : `${Math.round(miles)} mi`;
 }
+
+/**
+ * `zip_centroids` is keyed on the 5-digit ZIP, and ZIP+4 and stray spaces are
+ * common in what people type. Anything with fewer than five digits is not a ZIP.
+ */
+export function normalizeZip(value: string) {
+  const digits = value.replace(/\D/g, "");
+  return digits.length >= 5 ? digits.slice(0, 5) : null;
+}
