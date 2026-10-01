@@ -226,6 +226,16 @@ Each entry below states the hook that already exists. If an item has no hook, th
 | **To build**     | A user-management UI in the dispatcher console                                                    |
 | **Size**         | Small — deliberately designed as a UI-only change                                                 |
 
+### Order-intent matching and the abandoned-intent sweep
+
+|                  |                                                                                                                                                          |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **What**         | Tie an arriving cart email to the intent the customer started, and expire intents nobody followed through on                                              |
+| **Why deferred** | Matching belongs to email intake, which is not built. The portal writes and reads intents today, but nothing consumes them yet                            |
+| **Hook**         | `order_intents.status` already carries `matched` and `expired`, and the `(status, created_at)` index exists for the sweep                                 |
+| **To build**     | A matcher on the inbound path, and a cron sweep over open intents older than a window                                                                     |
+| **Size**         | Medium                                                                                                                                                    |
+
 ### Automated re-broadcast on expiry
 
 |                  |                                                                                 |

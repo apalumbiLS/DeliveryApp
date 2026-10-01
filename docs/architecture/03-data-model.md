@@ -40,6 +40,11 @@ erDiagram
     ORDERS ||--o{ ATTACHMENTS : evidences
     ORDERS ||--o{ NOTIFICATIONS : sends
     ORDERS ||--o{ PAYMENTS : bills
+    COMPANIES ||--o{ ORDER_INTENTS : drafts
+    PROFILES ||--o{ ORDER_INTENTS : creates
+    COMPANY_SITES ||--o{ ORDER_INTENTS : "delivers to"
+    RETAILER_STORES ||--o{ ORDER_INTENTS : "picked up from"
+    ORDERS ||--o| ORDER_INTENTS : "matched to"
     PROFILES ||--o{ JOB_DECLINES : declines
     PROFILES ||--o{ ORDERS : "assigned to"
 ```
@@ -60,6 +65,7 @@ erDiagram
 | `notification_channel`      | `email`, `sms`                                                                                                                                                                                                                  |
 | `notification_status`       | `queued`, `sent`, `delivered`, `failed`, `bounced`                                                                                                                                                                              |
 | `payment_status`            | `created`, `sent`, `paid`, `expired`, `refunded`                                                                                                                                                                                |
+| `order_intent_status`       | `open`, `matched`, `expired`                                                                                                                                                                                                    |
 
 `cancelled` and `substituted` exist from day one with no UI. That is what makes those features additive later. See [12-deferred-and-extension-points](12-deferred-and-extension-points.md).
 
@@ -129,6 +135,8 @@ Seeded store list. The dispatcher picks from here — this is the only source of
 | `lat` / `lng`                                   | double precision              |                                     |
 | `phone`                                         | text                          |                                     |
 | `hours`                                         | jsonb                         |                                     |
+| `store_url`                                     | text                          | Verified store page (ADR-0010). Null → the portal falls back to the retailer's homepage |
+| `store_label`                                   | text                          | The retailer's own wording for the store, shown in "Check your store" |
 | `active`                                        | boolean NOT NULL DEFAULT true |                                     |
 |                                                 |                               | UNIQUE (`retailer`, `store_number`) |
 
@@ -247,6 +255,28 @@ Append-only audit log. Never updated, never deleted.
 
 This table is the hook for the deferred automated customer status notifications: a fan-out on insert turns that feature on without touching the order table.
 
+### `order_intents`
+
+A draft captured by the portal's start-an-order flow: the site, retailer, and store a customer chose **before** they built the cart (ADR-0010). An intent is **not** an order — the order still originates only from a cart email, so email intake is untouched.
+
+| Column                      | Type                                        | Notes                                                       |
+| --------------------------- | ------------------------------------------- | ----------------------------------------------------------- |
+| `id`                        | uuid PK                                     |                                                             |
+| `company_id`                | uuid FK → companies NOT NULL                |                                                             |
+| `created_by_profile_id`     | uuid FK → profiles                          | Who started it                                              |
+| `site_id`                   | uuid FK → company_sites                     | The saved site, when they picked one                        |
+| `delivery_address`          | jsonb                                       | Snapshot; set even for a new address, so the intent stands alone |
+| `retailer`                  | retailer NOT NULL                           |                                                             |
+| `retailer_store_id`         | uuid FK → retailer_stores                   |                                                             |
+| `status`                    | order_intent_status NOT NULL DEFAULT 'open' | Only `open` is written by the portal                        |
+| `order_id`                  | uuid FK → orders                            | Set when a cart email is matched to this intent             |
+| `matched_at`                | timestamptz                                 |                                                             |
+| `created_at` / `updated_at` | timestamptz NOT NULL DEFAULT now()          |                                                             |
+
+`delivery_address` is a snapshot rather than a read-through to `site_id` for two reasons: a customer can type an address that is not yet a saved site, and a saved site can be edited later. The intent records what was agreed, not what the site happens to say today.
+
+`matched` and `expired` are not written yet — matching an arriving cart to its intent belongs to the email-intake work, and the sweep over abandoned intents is deferred (see [12-deferred-and-extension-points](12-deferred-and-extension-points.md)).
+
 ### `job_declines`
 
 A driver's "no" on an open posting. Append-only; the only per-driver dispatch fact the MVP keeps.
@@ -335,6 +365,9 @@ Beyond primary and foreign keys:
 | `job_declines`        | unique (`order_id`, `driver_id`)        | One decline per driver per order |
 | `job_declines`        | (`order_id`)                            | Order card: who declined         |
 | `order_status_events` | (`order_id`, `created_at`)              | Status timeline                  |
+| `order_intents`       | (`company_id`, `created_at` desc)       | A company's own intents          |
+| `order_intents`       | (`status`, `created_at`)                | Sweep over abandoned intents     |
+| `order_intents`       | unique (`order_id`)                     | One intent per order             |
 | `notifications`       | unique (`dedupe_key`)                   | Send idempotency                 |
 | `notifications`       | (`status`, `created_at`)                | Outbox drain                     |
 | `parse_attempts`      | (`inbound_email_id`, `created_at`)      | Parse diagnostics                |
@@ -349,11 +382,12 @@ RLS is enabled on every table in `public`. Policies are summarised here and spec
 | ---------------------------------- | ------------------ | ------------------------------------------------------ | ---------- |
 | `companies`                        | own row            | —                                                      | all        |
 | `profiles`                         | own row            | own row                                                | all        |
-| `company_sites`                    | own company        | —                                                      | all        |
+| `company_sites`                    | own company (read, insert) | —                                              | all        |
 | `retailer_stores`                  | read               | read                                                   | all        |
 | `orders`                           | own company        | assigned only; open postings via the redacted function | all        |
 | `order_items`                      | via order          | via order                                              | all        |
 | `order_status_events`              | via order          | via order                                              | all        |
+| `order_intents`                    | own company (insert, read) | —                                              | all        |
 | `job_declines`                     | —                  | own declines (insert + read)                           | all        |
 | `attachments`                      | via order          | via order                                              | all        |
 | `notifications`                    | —                  | —                                                      | all        |
@@ -378,6 +412,8 @@ Schema changes are **versioned SQL files applied in order** — Flyway-style, no
 | `0002_<change>.sql`             | One incremental change.                                                                          |
 | `0003_<change>.sql`             | …and so on, one file per change, never a bulk re-write of what came before.                       |
 
+`0002_order_intents_and_store_urls.sql` is the first incremental change: it adds `order_intents`, the two `retailer_stores` columns above, and the customer insert policy on `company_sites`.
+
 Naming is zero-padded four digits plus a short `snake_case` description: `0002_add_order_photos.sql`. The Supabase CLI's own matcher accepts any numeric prefix (`^([0-9]+)_(.*)\.sql$`), so this numbering works both by hand and with `supabase db push`.
 
 Applying them:
@@ -399,5 +435,9 @@ The base script is deliberately **not** idempotent — a second run fails on the
 
 Reference rows that every environment needs (the `retailer_stores` list) live in `supabase/seed/`, are **idempotent** so they can be re-run safely, and are applied *after* migrations — never as part of them. A migration defines structure; a seed defines rows.
 
-There is deliberately no seed data yet. The Lowe's store list is staged in `External Notes/lowes-nc-stores.json` (118 stores, with number, name, street, city, state, zip, phone, lat/lng — everything `retailer_stores` needs) and is seeded once the service area is settled. Note that the checklist in [11-deployment-and-environments](11-deployment-and-environments.md) and the dry-run checklist currently say **Upstate SC** while that staged list is **North Carolina**; that discrepancy is unresolved, and seeding is blocked on it.
+`supabase/seed/0001_dev.sql` is the dev seed: one demo company and its two sites, the 118 North Carolina Lowe's stores from `External Notes/lowes-nc-stores.json` (with `store_url` and `store_label`), and four demo orders. It is **idempotent and corrective** — re-running refreshes the rows it owns rather than skipping them, which is what lets it backfill columns added by a later migration.
+
+There is still no Home Depot list, so the seeded stores are Lowe's only. The portal derives which retailers to offer from the stores that exist, so seeding Home Depot later is a seed change and not a code change.
+
+The service-area question remains open: the checklist in [11-deployment-and-environments](11-deployment-and-environments.md) and the dry-run checklist say **Upstate SC**, while the only staged list is **North Carolina**. The dev seed sidesteps it by placing the demo company in Charlotte NC so "nearest store" is meaningful against that list — a demo choice, not a resolution.
 

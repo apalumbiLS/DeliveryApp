@@ -1,87 +1,132 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 
-import { Badge } from "@/components/ui/badge";
+import { StartOrderFlow } from "@/components/portal/start/start-order-flow";
+import type { FlowSite, FlowStore } from "@/components/portal/start/types";
 import { Card } from "@/components/ui/card";
-import { PageHeader } from "@/components/ui/page-header";
+import { isRetailerId } from "@/lib/retailers";
+import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
   title: "Start an order",
 };
 
-const STEPS = [
-  {
-    title: "Where it's going",
-    body: "Pick the job site — that's where we deliver.",
-  },
-  {
-    title: "Where you'll shop",
-    body: "Home Depot or Lowe's. You build the cart on their site.",
-  },
-  {
-    title: "The store",
-    body: "We suggest the nearest one and you can change it.",
-  },
-  {
-    title: "Check your store",
-    body: "We show you how to confirm it before you build the cart.",
-  },
-  {
-    title: "Build & share",
-    body: "Add your items, then share the cart to your company's address.",
-  },
-];
+type SiteRow = {
+  id: string;
+  label: string | null;
+  address_line1: string | null;
+  address_line2: string | null;
+  city: string | null;
+  state: string | null;
+  postal_code: string | null;
+  lat: number | null;
+  lng: number | null;
+  is_default: boolean;
+};
 
-/**
- * Scaffold for the real start-an-order flow. The steps mirror the approved
- * mockup at /mockups/start; this page is the placeholder the home card points
- * at until that flow is built.
- */
-export default function PortalStartPage() {
-  return (
-    <div>
-      <PageHeader
-        title="Start an order"
-        description="Build a cart at Home Depot or Lowe's, then share it with us."
-      />
+type StoreRow = {
+  id: string;
+  retailer: string;
+  name: string;
+  store_label: string | null;
+  address_line1: string | null;
+  city: string | null;
+  state: string | null;
+  postal_code: string | null;
+  lat: number | null;
+  lng: number | null;
+  store_url: string | null;
+  phone: string | null;
+};
 
-      <Card className="mt-5 p-6">
-        <Badge tone="warning" bordered>
-          Coming next
-        </Badge>
+export default async function PortalStartPage() {
+  const supabase = await createClient();
 
-        <h2 className="mt-3 text-[15px] font-semibold tracking-tight text-ink">
-          This flow is the next thing we build
-        </h2>
-        <p className="mt-1.5 text-[12.5px] leading-relaxed text-ink-muted">
-          The design is settled. These are the five steps that will live here.
+  const [sitesResult, storesResult, companyResult] = await Promise.all([
+    supabase
+      .from("company_sites")
+      .select(
+        "id, label, address_line1, address_line2, city, state, postal_code, lat, lng, is_default",
+      )
+      .order("is_default", { ascending: false })
+      .order("label"),
+    supabase
+      .from("retailer_stores")
+      .select(
+        "id, retailer, name, store_label, address_line1, city, state, postal_code, lat, lng, store_url, phone",
+      )
+      .eq("active", true)
+      .order("name"),
+    supabase.from("companies").select("order_alias").maybeSingle(),
+  ]);
+
+  // Every query here runs through RLS on the customer's own session, so the
+  // rows are already scoped to their company.
+  const sites: FlowSite[] = (
+    (sitesResult.data ?? []) as unknown as SiteRow[]
+  ).map((row) => ({
+    id: row.id,
+    label: row.label,
+    addressLine1: row.address_line1,
+    addressLine2: row.address_line2,
+    city: row.city,
+    state: row.state,
+    postalCode: row.postal_code,
+    lat: row.lat,
+    lng: row.lng,
+    isDefault: row.is_default,
+  }));
+
+  const stores: FlowStore[] = (
+    (storesResult.data ?? []) as unknown as StoreRow[]
+  )
+    .filter((row) => isRetailerId(row.retailer))
+    .map((row) => ({
+      id: row.id,
+      retailer: row.retailer as FlowStore["retailer"],
+      name: row.name,
+      storeLabel: row.store_label,
+      addressLine1: row.address_line1,
+      city: row.city,
+      state: row.state,
+      postalCode: row.postal_code,
+      lat: row.lat,
+      lng: row.lng,
+      storeUrl: row.store_url,
+      phone: row.phone,
+    }));
+
+  const alias =
+    (companyResult.data as unknown as { order_alias: string } | null)
+      ?.order_alias ?? "";
+
+  if (sitesResult.error || storesResult.error) {
+    return (
+      <Card className="p-6">
+        <h1 className="text-[15px] font-semibold text-ink">
+          Could not load the order flow
+        </h1>
+        <p className="mt-1 text-[12.5px] leading-relaxed text-ink-muted">
+          {sitesResult.error?.message ?? storesResult.error?.message}
         </p>
-
-        <ol className="mt-5 space-y-3">
-          {STEPS.map((step, index) => (
-            <li key={step.title} className="flex gap-3">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sunken text-[11.5px] font-semibold text-ink-muted tabular-nums">
-                {index + 1}
-              </span>
-              <span className="min-w-0">
-                <span className="block text-[13px] font-medium text-ink">
-                  {step.title}
-                </span>
-                <span className="mt-0.5 block text-[12px] leading-relaxed text-ink-muted">
-                  {step.body}
-                </span>
-              </span>
-            </li>
-          ))}
-        </ol>
-
-        <Link
-          href="/portal"
-          className="mt-6 inline-block text-[12.5px] font-medium text-accent transition-colors hover:text-accent-hover"
-        >
-          ← Back to home
-        </Link>
       </Card>
-    </div>
-  );
+    );
+  }
+
+  // Without at least one store there is nothing to pick up from, and the
+  // retailer step would be empty.
+  if (stores.length === 0) {
+    return (
+      <Card className="p-6">
+        <h1 className="text-[15px] font-semibold text-ink">
+          No stores are set up yet
+        </h1>
+        <p className="mt-1 text-[12.5px] leading-relaxed text-ink-muted">
+          We&apos;re still adding the stores we buy from. Get in touch and
+          we&apos;ll get you started.
+        </p>
+      </Card>
+    );
+  }
+
+  return <StartOrderFlow sites={sites} stores={stores} alias={alias} />;
 }

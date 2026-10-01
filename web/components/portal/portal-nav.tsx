@@ -16,9 +16,11 @@ export function PortalNav() {
   return (
     <nav className="mx-auto flex w-full max-w-3xl gap-1 px-5 pb-2">
       {LINKS.map((link) => {
+        // Starting an order is reached from Home, so it keeps Home lit rather
+        // than leaving the nav with nothing selected.
         const active =
           link.href === "/portal"
-            ? pathname === "/portal"
+            ? pathname === "/portal" || pathname === "/portal/start"
             : pathname.startsWith(link.href);
 
         return (

@@ -27,6 +27,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - `/portal/*` is the customer area, guarded in `app/portal/layout.tsx`; `/mockups` and `/design` stay public. Sign-in and sign-out are in `app/actions/auth.ts`.
 - `/admin/*` is the dispatcher-only console (`app/admin/`) that creates users and assigns role and company. "Admin" is not a role — dispatchers hold administrative permissions. The **first** dispatcher is created by hand in the dashboard; see the seed.
 - Creating and listing accounts needs `SUPABASE_SECRET_KEY`, which only lives in `lib/supabase/admin.ts`. Route-group code reaches it through `lib/admin/*` and never imports that module directly; every privileged action calls `requireAdmin()` first, because the secret key bypasses RLS entirely.
+- `/portal/start` is the real start-an-order flow (site → retailer → store → check your store → build & share). It writes an **`order_intent`** — a draft — and never an order: orders still originate only from a cart email (ADR-0010). Customer mutations call `requireCustomer()` for the same reason admin ones call `requireAdmin()`.
 
 ## Commands
 

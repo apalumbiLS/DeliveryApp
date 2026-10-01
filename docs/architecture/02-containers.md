@@ -147,6 +147,8 @@ src/
       require-admin.ts          # the gate in front of every privileged action
       users.ts                  # directory + create, via the secret key
       config.ts                 # isAdminConfigured()
+    portal/
+      require-customer.ts       # the gate in front of customer mutations
     notifications/
       templates/
       send.ts
@@ -156,7 +158,7 @@ src/
     supabase/
       client.ts                 # browser client
       server.ts                 # RLS-scoped server client
-      admin.ts                  # service role — webhooks + cron only
+      admin.ts                  # service role — webhooks, cron, admin console
 ```
 
 Two rules this layout encodes:

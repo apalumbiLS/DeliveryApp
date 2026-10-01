@@ -65,6 +65,8 @@ Middleware reads the role from the JWT claim and redirects cross-role access to 
 | Sign-in screen                         | `web/app/(auth)/login/`                        |
 | Access request (no self-signup)        | `web/app/(auth)/request-access/`               |
 | Customer guard and chrome              | `web/app/portal/layout.tsx`                    |
+| Start-an-order flow (writes an intent) | `web/app/portal/start/`                        |
+| Customer mutation guard                | `web/lib/portal/require-customer.ts`           |
 | Admin guard and directory              | `web/app/admin/`                               |
 | Privileged user operations             | `web/lib/admin/` (`users.ts`, `require-admin.ts`) |
 | Secret-key client                      | `web/lib/supabase/admin.ts`                    |
@@ -152,7 +154,14 @@ create policy companies_write on companies for all
   using (is_dispatcher()) with check (is_dispatcher());
 ```
 
-Same shape for `company_sites` (scoped by `company_id`) and `retailer_stores` (readable by everyone authenticated, writable by dispatchers only).
+Same shape for `company_sites` and `retailer_stores` (readable by everyone authenticated, writable by dispatchers only), with one addition: a customer may **insert** a site for their own company, which is what lets the start-an-order flow save a new address.
+
+```sql
+create policy company_sites_customer_insert on company_sites for insert
+  with check (company_id = current_company_id());
+```
+
+Policies for the same command are ORed, so this widens INSERT without touching dispatcher access — and a customer still cannot update or delete a site.
 
 ### Orders
 
@@ -212,6 +221,26 @@ create policy order_items_read on order_items for select using (
 ```
 
 The subquery is itself subject to the `orders` policies, so visibility composes correctly for all three roles without restating the rules.
+
+### Order intents
+
+```sql
+alter table order_intents enable row level security;
+
+create policy order_intents_dispatcher on order_intents for all
+  using (is_dispatcher()) with check (is_dispatcher());
+
+create policy order_intents_customer_insert on order_intents for insert
+  with check (
+    company_id = current_company_id()
+    and created_by_profile_id = auth.uid()
+  );
+
+create policy order_intents_customer_read on order_intents for select
+  using (company_id = current_company_id());
+```
+
+The insert policy is deliberately two-sided. `company_id = current_company_id()` keeps a customer inside their own company; `created_by_profile_id = auth.uid()` stops one portal user forging an intent in a colleague's name, which starts to matter as soon as a company has more than one login.
 
 ### Job declines
 
