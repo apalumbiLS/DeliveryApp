@@ -5,7 +5,13 @@
  * may use, so variant props stay typed and exhaustive.
  */
 
-export const TONES = ["neutral", "info", "success", "warning", "danger"] as const;
+export const TONES = [
+  "neutral",
+  "info",
+  "success",
+  "warning",
+  "danger",
+] as const;
 
 export type Tone = (typeof TONES)[number];
 
@@ -48,4 +54,27 @@ export const orderStatusLabel: Record<OrderStatus, string> = {
   paid: "Paid",
   closed: "Closed",
   cancelled: "Cancelled",
+};
+
+/**
+ * Portal user roles — the `user_role` enum.
+ *
+ * "Admin" is deliberately not a role: dispatchers hold administrative
+ * permissions, so the console that manages users is gated on `dispatcher`.
+ * See docs/architecture/10-auth-and-permissions.md.
+ */
+export const USER_ROLES = ["dispatcher", "driver", "customer"] as const;
+
+export type UserRole = (typeof USER_ROLES)[number];
+
+export const userRoleLabel: Record<UserRole, string> = {
+  dispatcher: "Dispatcher",
+  driver: "Driver",
+  customer: "Customer",
+};
+
+export const userRoleTone: Record<UserRole, Tone> = {
+  dispatcher: "info",
+  driver: "neutral",
+  customer: "success",
 };

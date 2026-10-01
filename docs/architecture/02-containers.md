@@ -110,10 +110,11 @@ src/
     (driver)/                   # driver app — role: driver
       jobs/
       active/
-    (portal)/                   # customer portal — role: customer
+    portal/                     # customer portal — role: customer
       orders/
-      checkout/
-      sites/
+      start/
+    admin/                      # admin console — role: dispatcher
+      users/
     api/
       webhooks/
         mailgun/inbound/route.ts
@@ -121,7 +122,10 @@ src/
       cron/
         drain-notifications/route.ts
         expire-broadcasts/route.ts
-    login/
+    (auth)/
+      login/
+      request-access/
+  proxy.ts                      # session refresh + optimistic route guards
   lib/
     parsers/
       index.ts                  # retailer detection + orchestration
@@ -138,6 +142,11 @@ src/
     auth/
       session.ts
       guards.ts                 # requireRole()
+      home.ts                   # role → landing page
+    admin/
+      require-admin.ts          # the gate in front of every privileged action
+      users.ts                  # directory + create, via the secret key
+      config.ts                 # isAdminConfigured()
     notifications/
       templates/
       send.ts

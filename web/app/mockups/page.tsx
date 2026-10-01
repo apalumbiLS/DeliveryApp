@@ -13,6 +13,7 @@ import { CleanSaas } from "./orders/clean-saas";
 import { ApprovalEmail } from "./start/email";
 import { StartOrderFlow } from "./start/flow";
 import { HomeScreen } from "./start/home";
+import { LoginScreen } from "./start/login";
 
 export const metadata: Metadata = {
   title: "Mockups — all screens",
@@ -51,7 +52,9 @@ const GROUPS: Group[] = [
     screens: [
       {
         name: "Login",
-        note: "One login per company — email + password.",
+        note: "One login per company — email + password. Built and live at /login.",
+        href: "/login",
+        Component: LoginScreen,
       },
       {
         name: "Home",

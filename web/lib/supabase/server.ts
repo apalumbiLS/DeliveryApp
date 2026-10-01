@@ -1,4 +1,5 @@
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
 
 /**
  * Whether the Supabase environment is present. Pages use this to render a
@@ -8,7 +9,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 export function isSupabaseConfigured(): boolean {
   return Boolean(
     process.env.NEXT_PUBLIC_SUPABASE_URL &&
-      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
   );
 }
 
@@ -22,9 +23,16 @@ export function isSupabaseConfigured(): boolean {
  * enumerated call sites — see
  * docs/architecture/10-auth-and-permissions.md#service-role-usage.
  *
- * No session is persisted: this runs per request on the server, not in a browser.
+ * The session lives in the `sb-<ref>-auth-token` cookie, so this client sees
+ * whoever is signed in. A fresh client is created per request: it reads the
+ * request's cookies, and a client shared across requests would carry one user's
+ * session into another's response.
+ *
+ * Server Components cannot write cookies, so the `setAll` write is best-effort
+ * here. `proxy.ts` refreshes the token on every request and writes the rotated
+ * cookies onto the response; that is what keeps the session alive.
  */
-export function createServerClient(): SupabaseClient {
+export async function createClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
@@ -34,7 +42,23 @@ export function createServerClient(): SupabaseClient {
     );
   }
 
-  return createClient(url, key, {
-    auth: { persistSession: false, autoRefreshToken: false },
+  const cookieStore = await cookies();
+
+  return createServerClient(url, key, {
+    cookies: {
+      getAll() {
+        return cookieStore.getAll();
+      },
+      setAll(cookiesToSet) {
+        try {
+          cookiesToSet.forEach(({ name, value, options }) =>
+            cookieStore.set(name, value, options),
+          );
+        } catch {
+          // Called from a Server Component, where cookies are read-only. The
+          // proxy owns the write path, so there is nothing to recover here.
+        }
+      },
+    },
   });
 }

@@ -2,7 +2,7 @@
 
 Identity, route guards, and the Row Level Security policies that enforce access.
 
-> **Status:** Planned design. Not yet implemented. RLS policies ship in the same migration as their tables.
+> **Status:** Partly implemented. The sign-in flow and the customer portal guard are live; the dispatcher and driver consoles are not built. RLS policies ship in the same migration as their tables.
 
 ---
 
@@ -45,12 +45,34 @@ A fourth concept — **admin** — is not a role. Dispatchers hold administrativ
 | `/dispatch/*`     | `dispatcher`              | Redirect to `/login` |
 | `/driver/*`       | `driver`                  | Redirect to `/login` |
 | `/portal/*`       | `customer`                | Redirect to `/login` |
+| `/admin/*`        | `dispatcher`              | Redirect to `/portal` |
 | `/login`          | none                      | —                    |
+| `/request-access` | none                      | —                    |
 | `/api/webhooks/*` | none — signature-verified | `400` / `406`        |
 
 Route guards are a **UX affordance, not a security boundary**. They stop a driver from seeing a dispatcher page; they do not protect data. RLS does that, and it holds even if a guard is bypassed or a route is added without one.
 
 Middleware reads the role from the JWT claim and redirects cross-role access to the correct home for that role rather than to a dead end.
+
+### As built
+
+| Piece                                  | Where                                          |
+| -------------------------------------- | ---------------------------------------------- |
+| Session refresh + optimistic redirects | `web/proxy.ts` (Next 16 renamed `middleware`)  |
+| Cookie-based server client             | `web/lib/supabase/server.ts`                   |
+| Browser client                         | `web/lib/supabase/client.ts`                   |
+| Sign-in / sign-out server actions      | `web/app/actions/auth.ts`                      |
+| Sign-in screen                         | `web/app/(auth)/login/`                        |
+| Access request (no self-signup)        | `web/app/(auth)/request-access/`               |
+| Customer guard and chrome              | `web/app/portal/layout.tsx`                    |
+| Admin guard and directory              | `web/app/admin/`                               |
+| Privileged user operations             | `web/lib/admin/` (`users.ts`, `require-admin.ts`) |
+| Secret-key client                      | `web/lib/supabase/admin.ts`                    |
+| Role → landing page                    | `web/lib/auth/home.ts`                         |
+
+Only the first dispatcher is created by hand, in the dashboard — the console cannot promote anyone until a dispatcher exists. Every account after that is created from `/admin`, which also assigns role and company and deactivates. Deactivation is `profiles.active = false`, the same mechanism as the RLS helpers check.
+
+The proxy answers only "is there a session?" via `getClaims()`. The portal layout enforces the role, and RLS enforces the data. A signed-in non-customer sees a notice rather than a redirect, so no login↔portal loop can form while the other consoles are unbuilt.
 
 ---
 
@@ -236,11 +258,11 @@ The secret key (`sb_secret_...`, formerly the `service_role` key) bypasses RLS e
 | -------------------------------------------------------- | ------------------------------------------------------------------------ |
 | Webhook route handlers (Mailgun, Stripe)                 | No user context exists; the caller is a provider                         |
 | Cron sweep routes (`/api/cron/*`)                        | Scheduled work runs with no session; protected by a shared-secret header |
-| Admin actions in the dispatcher console (creating users) | The Supabase admin API requires it                                       |
+| Admin console (`/admin`) — creating a user, listing accounts | The Supabase admin API (`auth.admin.*`) requires it; every call follows `requireAdmin()` |
 
 Rules that keep this safe:
 
-1. The service role client lives in `lib/supabase/admin.ts` and is **never** imported into a client component or a route group.
+1. The service role client lives in `lib/supabase/admin.ts` and is **never** imported into a client component or a route group — route-group code reaches it through `lib/admin/*` instead.
 2. Server actions that use it must independently verify the caller's role first — RLS will not do it for them.
 3. Every service-role code path is listed above. Adding a fourth requires updating this document.
 

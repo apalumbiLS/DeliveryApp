@@ -18,6 +18,16 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Mockup demo data is shared and must stay consistent: `app/mockups/orders/detail/data.ts` (the order, items, price) feeds the email, the order page, and the driver's accepted job (`app/mockups/driver/data.ts` imports it); `app/mockups/start/data.ts` holds sites, retailers, and stores (the console derives its store options and distances from it); `app/mockups/dispatch/data.ts` is one console story keyed to the same order numbers.
 - Console screens are composed from `app/mockups/dispatch/parts.tsx` (`ConsoleShell`, `Band`, `CheckRow`, `SizePicker`, table primitives) so the frames read as one application.
 
+## Auth & the customer portal
+
+- Supabase email + password (ADR-0007). Self-signup is **off** — accounts are created by a dispatcher, and `/request-access` explains that rather than collecting a request.
+- `lib/supabase/client.ts` is the browser client; `lib/supabase/server.ts` is the cookie-based server client and **`createClient()` is async**. Both use the publishable key, so RLS — not the UI — decides what a caller can see.
+- `proxy.ts` (Next 16 renamed `middleware` → `proxy`) refreshes the session and does optimistic redirects. It is a UX gate, not the security boundary.
+- On the server, use `supabase.auth.getClaims()`, **never** `getSession()` — the latter trusts the cookie without verifying its signature.
+- `/portal/*` is the customer area, guarded in `app/portal/layout.tsx`; `/mockups` and `/design` stay public. Sign-in and sign-out are in `app/actions/auth.ts`.
+- `/admin/*` is the dispatcher-only console (`app/admin/`) that creates users and assigns role and company. "Admin" is not a role — dispatchers hold administrative permissions. The **first** dispatcher is created by hand in the dashboard; see the seed.
+- Creating and listing accounts needs `SUPABASE_SECRET_KEY`, which only lives in `lib/supabase/admin.ts`. Route-group code reaches it through `lib/admin/*` and never imports that module directly; every privileged action calls `requireAdmin()` first, because the secret key bypasses RLS entirely.
+
 ## Commands
 
 - Before considering work done: `bun run lint`, `bun run typecheck`, `bun run build`.
@@ -34,4 +44,3 @@ Schema lives at the **repo root** in `supabase/`, not in this directory.
 - Seed data (idempotent, applied after migrations — never as part of them) goes in `supabase/seed/`. There is none yet.
 - Apply by hand in the Supabase SQL editor, in filename order, or with `supabase link --project-ref <ref> && supabase db push`.
 - Conventions: `docs/architecture/03-data-model.md#migrations`. Policy detail: `docs/architecture/10-auth-and-permissions.md`.
-

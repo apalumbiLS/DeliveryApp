@@ -5,8 +5,13 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Badge } from "@/components/ui/badge";
 import { Button, type ButtonIntent } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Field } from "@/components/ui/field";
 import { Chevron, CopyIcon } from "@/components/ui/icons";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { List, ListItem } from "@/components/ui/list";
+import { PageHeader } from "@/components/ui/page-header";
+import { Select } from "@/components/ui/select";
 import { StatusDot } from "@/components/ui/status-dot";
 import { cn } from "@/lib/utils";
 import {
@@ -335,6 +340,66 @@ export default function DesignPage() {
               Disabled
             </Button>
           </div>
+        </Section>
+
+        <Section
+          title="Form controls"
+          note="label · input · select · field with hint and error"
+        >
+          <div className="max-w-sm space-y-5">
+            <Field
+              id="design-email"
+              label="Email"
+              hint="We'll never share this."
+            >
+              {(control) => (
+                <Input
+                  {...control}
+                  type="email"
+                  placeholder="you@company.com"
+                />
+              )}
+            </Field>
+
+            <Field
+              id="design-password"
+              label="Password"
+              error="That password is too short."
+            >
+              {(control) => (
+                <Input {...control} type="password" placeholder="••••••••" />
+              )}
+            </Field>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="design-plain">Plain input</Label>
+              <Input id="design-plain" placeholder="Default" />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="design-select">Select</Label>
+              <Select id="design-select" defaultValue="customer">
+                <option value="dispatcher">Dispatcher</option>
+                <option value="driver">Driver</option>
+                <option value="customer">Customer</option>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="design-disabled">Disabled</Label>
+              <Input id="design-disabled" disabled placeholder="Not editable" />
+            </div>
+          </div>
+        </Section>
+
+        <Section title="Page header" note="title · description · actions">
+          <Card className="p-5">
+            <PageHeader
+              title="Orders"
+              description="Everything your company has ordered."
+              actions={<Button size="sm">New order</Button>}
+            />
+          </Card>
         </Section>
 
         <Section title="StatusDot">
