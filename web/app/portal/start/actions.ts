@@ -199,3 +199,33 @@ export async function saveOrderIntent(
 
   return { ok: true, intentId: (intent as unknown as { id: string }).id };
 }
+
+export type ZipCentroid = { lat: number; lng: number };
+
+/**
+ * Resolve a typed ZIP to its centroid.
+ *
+ * `saveOrderIntent` already looks the ZIP up when it stores the site, but that
+ * is after the customer has chosen a store. The flow needs it *during* the
+ * store step, so a brand-new address can be ranked by distance like a saved
+ * one instead of falling back to alphabetical.
+ *
+ * Same source and same caveat as the intent path: a ZIP centroid is not the
+ * address.
+ */
+export async function lookupZipCentroid(
+  zip: string,
+): Promise<ZipCentroid | null> {
+  const { supabase } = await requireCustomer();
+
+  const normalized = normalizeZip(zip);
+  if (!normalized) return null;
+
+  const { data } = await supabase
+    .from("zip_centroids")
+    .select("lat, lng")
+    .eq("zip", normalized)
+    .maybeSingle();
+
+  return (data as unknown as ZipCentroid | null) ?? null;
+}

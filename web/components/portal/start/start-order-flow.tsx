@@ -2,10 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import { saveOrderIntent, type IntentInput } from "@/app/portal/start/actions";
+import {
+  lookupZipCentroid,
+  saveOrderIntent,
+  type IntentInput,
+} from "@/app/portal/start/actions";
 import { button } from "@/components/ui/button";
 import { Chevron, ExternalLinkIcon } from "@/components/ui/icons";
-import { distanceMiles } from "@/lib/geo";
+import { distanceMiles, normalizeZip } from "@/lib/geo";
 import { RETAILER_IDS, RETAILERS, type RetailerId } from "@/lib/retailers";
 import { cn } from "@/lib/utils";
 
@@ -32,10 +36,14 @@ export function StartOrderFlow({
   sites,
   stores,
   alias,
+  aliasDiagnostic,
 }: {
   sites: FlowSite[];
   stores: FlowStore[];
-  alias: string;
+  /** The full customer-facing order address, or null when it isn't configured. */
+  alias: string | null;
+  /** Names the missing half of the address. Development only. */
+  aliasDiagnostic?: string | null;
 }) {
   const defaultSite = sites.find((site) => site.isDefault) ?? sites[0] ?? null;
 
@@ -50,10 +58,37 @@ export function StartOrderFlow({
   const [intentId, setIntentId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [zipResolution, setZipResolution] = useState<{
+    zip: string;
+    point: { lat: number; lng: number } | null;
+  } | null>(null);
 
   useEffect(() => {
     window.scrollTo({ top: 0 });
   }, [step]);
+
+  // A new address has no coordinates of its own, so borrow the ZIP's. Resolved
+  // once the ZIP is complete, which is what lets a new address rank stores by
+  // distance like a saved one.
+  const newZip = siteMode === "new" ? normalizeZip(address.postalCode) : null;
+
+  useEffect(() => {
+    if (!newZip) return;
+
+    let cancelled = false;
+
+    void lookupZipCentroid(newZip).then((point) => {
+      if (!cancelled) setZipResolution({ zip: newZip, point });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [newZip]);
+
+  // Keyed by ZIP, so a slow lookup can never be applied to a different one.
+  const newAddressPoint =
+    newZip && zipResolution?.zip === newZip ? zipResolution.point : null;
 
   // Only retailers that actually have stores are offered, so seeding Home
   // Depot later is enough to add it here.
@@ -67,13 +102,15 @@ export function StartOrderFlow({
 
   const activeRetailerId = retailerId ?? availableRetailers[0] ?? null;
 
-  const sitePoint = useMemo(() => {
+  const savedSitePoint = useMemo(() => {
     if (siteMode !== "saved") return null;
     const site = sites.find((entry) => entry.id === savedSiteId);
     return site?.lat != null && site.lng != null
       ? { lat: site.lat, lng: site.lng }
       : null;
   }, [siteMode, savedSiteId, sites]);
+
+  const sitePoint = siteMode === "saved" ? savedSitePoint : newAddressPoint;
 
   const ranked = useMemo<RankedStore[]>(() => {
     const forRetailer = stores.filter(
@@ -259,7 +296,14 @@ export function StartOrderFlow({
         ) : null}
 
         {step === 3 && activeRetailerId && activeEntry ? (
-          <CheckStoreStep retailerId={activeRetailerId} store={activeEntry} />
+          <CheckStoreStep
+            retailerId={activeRetailerId}
+            store={activeEntry}
+            onChangeStore={() => {
+              setError(null);
+              setStep(2);
+            }}
+          />
         ) : null}
 
         {step === 4 && activeRetailerId && activeEntry ? (
@@ -267,6 +311,7 @@ export function StartOrderFlow({
             retailerId={activeRetailerId}
             store={activeEntry}
             alias={alias}
+            aliasDiagnostic={aliasDiagnostic}
           />
         ) : null}
       </section>

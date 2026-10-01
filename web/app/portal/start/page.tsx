@@ -95,9 +95,33 @@ export default async function PortalStartPage() {
       phone: row.phone,
     }));
 
-  const alias =
+  // `order_alias` is the local part only; the domain is configuration, because
+  // staging and production send from different domains. With either half
+  // missing there is no address to show, and showing a broken one would send a
+  // customer's cart nowhere.
+  const orderAlias =
     (companyResult.data as unknown as { order_alias: string } | null)
-      ?.order_alias ?? "";
+      ?.order_alias ?? null;
+  const aliasDomain = process.env.ORDER_ALIAS_DOMAIN?.trim() || null;
+
+  const alias =
+    orderAlias && aliasDomain ? `${orderAlias}@${aliasDomain}` : null;
+
+  // The customer-facing message stays vague on purpose. This names the missing
+  // half for whoever is setting the environment up, and is never rendered in
+  // production.
+  const aliasDiagnostic =
+    process.env.NODE_ENV === "production"
+      ? null
+      : [
+          orderAlias ? null : "companies.order_alias is empty",
+          aliasDomain ? null : "ORDER_ALIAS_DOMAIN is not set",
+          companyResult.error
+            ? `companies query failed: ${companyResult.error.message}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join("; ") || null;
 
   if (sitesResult.error || storesResult.error) {
     return (
@@ -128,5 +152,12 @@ export default async function PortalStartPage() {
     );
   }
 
-  return <StartOrderFlow sites={sites} stores={stores} alias={alias} />;
+  return (
+    <StartOrderFlow
+      sites={sites}
+      stores={stores}
+      alias={alias}
+      aliasDiagnostic={aliasDiagnostic}
+    />
+  );
 }

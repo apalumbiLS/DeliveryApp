@@ -25,15 +25,35 @@
 -- disabled (ADR-0007). See the block at the bottom of this file.
 
 -- Company --------------------------------------------------------------------
+-- order_alias is the LOCAL PART only. The domain is configuration
+-- (ORDER_ALIAS_DOMAIN), because staging and production must send from different
+-- domains — see docs/architecture/11-deployment-and-environments.md. The
+-- address a customer is shown is order_alias @ ORDER_ALIAS_DOMAIN.
+--
+-- The plus-tag is a pilot workaround: every customer shares one Gmail inbox and
+-- the tag identifies whose cart it is. It goes away when the alias moves to a
+-- domain whose MX records point at Mailgun — gmail.com cannot route to us, so
+-- nothing here is ingestible until then.
+--
+-- order_alias is the unique key, so a CHANGED alias cannot be upserted: an
+-- on-conflict insert would simply add a second company. Correct
+-- the existing row by name, then insert only if the alias is still missing.
+
+update companies
+   set order_alias = 'things.dispatch+acme-construction'
+ where name = 'Acme Construction'
+   and order_alias <> 'things.dispatch+acme-construction';
 
 insert into companies (name, order_alias, billing_email, phone)
-values (
+select
   'Acme Construction',
-  'acme@orders.example.com',
+  'things.dispatch+acme-construction',
   'billing@acme.example.com',
   '(864) 555-0142'
-)
-on conflict (order_alias) do nothing;
+ where not exists (
+   select 1 from companies
+    where order_alias = 'things.dispatch+acme-construction'
+ );
 
 -- Job sites ------------------------------------------------------------------
 -- company_sites has no natural key, so this is not an `on conflict` upsert.
@@ -65,7 +85,7 @@ refreshed as (
          lat = v.lat,
          lng = v.lng
     from site_values v, companies c
-   where c.order_alias = 'acme@orders.example.com'
+   where c.order_alias = 'things.dispatch+acme-construction'
      and cs.company_id = c.id
      and cs.label = v.label
   returning cs.id
@@ -79,7 +99,7 @@ select
   v.contact_name, v.contact_phone, v.instructions, v.is_default, v.lat, v.lng
 from site_values v
 cross join companies c
-where c.order_alias = 'acme@orders.example.com'
+where c.order_alias = 'things.dispatch+acme-construction'
   and not exists (
     select 1 from company_sites cs
      where cs.company_id = c.id and cs.label = v.label
@@ -248,7 +268,7 @@ cross join (values
    8720, 0, 0, 8720, interval '5 days')
 ) as o(order_number, retailer, status, requester_name, requester_email,
        materials_subtotal_cents, sizing_fee_cents, mileage_fee_cents, total_cents, age)
-where c.order_alias = 'acme@orders.example.com'
+where c.order_alias = 'things.dispatch+acme-construction'
 on conflict (order_number) do nothing;
 
 -- Accounts -------------------------------------------------------------------
@@ -274,7 +294,7 @@ on conflict (order_number) do nothing;
 -- values (
 --   '<customer-uuid>'::uuid,
 --   'customer',
---   (select id from companies where order_alias = 'acme@orders.example.com'),
+--   (select id from companies where order_alias = 'things.dispatch+acme-construction'),
 --   'Acme Portal'
 -- )
 -- on conflict (id) do update

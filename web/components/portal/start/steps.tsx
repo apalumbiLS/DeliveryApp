@@ -265,6 +265,9 @@ export function RetailerStep({
   );
 }
 
+/** How many stores the list shows before the customer searches. */
+const NEAREST_SHOWN = 5;
+
 export function StoreStep({
   ranked,
   value,
@@ -279,6 +282,7 @@ export function StoreStep({
   onChange: (storeId: string) => void;
 }) {
   const [picking, setPicking] = useState(false);
+  const [filter, setFilter] = useState("");
 
   const selected =
     ranked.find((entry) => entry.store.id === value)?.store ??
@@ -287,6 +291,26 @@ export function StoreStep({
   const selectedMiles =
     ranked.find((entry) => entry.store.id === selected?.id)?.miles ?? null;
 
+  const query = filter.trim().toLowerCase();
+
+  // One search over the things a customer actually knows: the ZIP, the city, or
+  // any part of the store's name.
+  const filtered = query
+    ? ranked.filter(({ store }) =>
+        [store.name, store.storeLabel, store.city, store.postalCode].some(
+          (field) => field !== null && field.toLowerCase().includes(query),
+        ),
+      )
+    : ranked;
+
+  // Unsearched, the list stays short — but it never hides the current choice.
+  const visible = query
+    ? filtered
+    : filtered.filter(
+        (entry, index) =>
+          index < NEAREST_SHOWN || entry.store.id === selected?.id,
+      );
+
   if (!selected) return null;
 
   return (
@@ -294,7 +318,7 @@ export function StoreStep({
       <StepHeading title="We'll pick up from here">
         {hasCoordinates
           ? `The closest store to ${siteLabel}.`
-          : `We can't estimate distances for a new address yet — pick the store you'll use.`}
+          : `We couldn't match that ZIP to a location, so these are in name order.`}
       </StepHeading>
 
       <Card className="mt-4 px-4 py-4">
@@ -319,24 +343,46 @@ export function StoreStep({
 
       {picking ? (
         <div className="mt-2.5 space-y-2">
-          {ranked.map((entry) => (
-            <SelectCard
-              key={entry.store.id}
-              selected={entry.store.id === selected.id}
-              title={entry.store.name}
-              subtitle={[
-                entry.miles !== null ? formatDistance(entry.miles) : null,
-                formatAddress(entry.store),
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-              onClick={() => onChange(entry.store.id)}
-            />
-          ))}
+          <Input
+            type="search"
+            value={filter}
+            onChange={(event) => setFilter(event.target.value)}
+            placeholder="Search by ZIP, city, or store name"
+            aria-label="Search stores"
+          />
 
-          <p className="px-1 text-[11.5px] leading-relaxed text-ink-faint">
-            Not seeing your store? Get in touch and we&apos;ll add it.
-          </p>
+          {visible.length === 0 ? (
+            <p className="px-1 py-1 text-[11.5px] leading-relaxed text-ink-faint">
+              No stores match “{filter.trim()}”. Get in touch and we&apos;ll add
+              it.
+            </p>
+          ) : (
+            visible.map((entry) => (
+              <SelectCard
+                key={entry.store.id}
+                selected={entry.store.id === selected.id}
+                title={entry.store.name}
+                subtitle={[
+                  entry.miles !== null ? formatDistance(entry.miles) : null,
+                  formatAddress(entry.store),
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+                onClick={() => onChange(entry.store.id)}
+              />
+            ))
+          )}
+
+          {visible.length > 0 ? (
+            <p className="px-1 text-[11.5px] leading-relaxed text-ink-faint">
+              {query
+                ? `${filtered.length} of ${ranked.length} match “${filter.trim()}”. `
+                : hasCoordinates
+                  ? `Showing the ${visible.length} closest of ${ranked.length}. `
+                  : `Showing ${visible.length} of ${ranked.length}. `}
+              Not seeing your store? Get in touch and we&apos;ll add it.
+            </p>
+          ) : null}
         </div>
       ) : null}
     </div>
@@ -346,24 +392,29 @@ export function StoreStep({
 export function CheckStoreStep({
   retailerId,
   store,
+  onChangeStore,
 }: {
   retailerId: RetailerId;
   store: RankedStore;
+  onChangeStore: () => void;
 }) {
   const retailer = RETAILERS[retailerId];
 
   return (
     <div>
       <StepHeading title="Check your store">
-        At the end of these steps we&apos;ll open the {retailer.label} website
-        for you. We&apos;re buying from {store.store.name}.
+        We&apos;re buying from {store.store.name}. But {retailer.label} has its
+        own store setting, and that&apos;s what decides the prices, stock, and
+        aisles you&apos;ll see while you build your cart.
       </StepHeading>
 
-      <p className="mt-2 text-[12.5px] leading-relaxed text-ink-muted">
-        If you see a{" "}
-        <span className="font-medium text-ink">{retailer.storeAction}</span>{" "}
-        button, click it.
-      </p>
+      <button
+        type="button"
+        onClick={onChangeStore}
+        className="mt-2 cursor-pointer text-[12.5px] font-medium text-accent transition-colors hover:text-accent-hover"
+      >
+        Change store
+      </button>
 
       <StoreDiagram retailerId={retailerId} store={store.store} />
     </div>
@@ -374,15 +425,19 @@ export function BuildShareStep({
   retailerId,
   store,
   alias,
+  aliasDiagnostic,
 }: {
   retailerId: RetailerId;
   store: RankedStore;
-  alias: string;
+  alias: string | null;
+  aliasDiagnostic?: string | null;
 }) {
   const [copied, setCopied] = useState(false);
   const retailer = RETAILERS[retailerId];
 
   async function copy() {
+    if (!alias) return;
+
     try {
       await navigator.clipboard.writeText(alias);
       setCopied(true);
@@ -400,13 +455,29 @@ export function BuildShareStep({
         request to us. Then tap Share Cart and paste this address:
       </StepHeading>
 
-      <div className="mt-3 flex items-center justify-between gap-2 rounded-field border border-hairline bg-card px-3 py-2.5">
-        <span className="truncate font-mono text-[12px] text-ink">{alias}</span>
-        <Button type="button" onClick={copy}>
-          <CopyIcon className="h-3.5 w-3.5" />
-          {copied ? "Copied" : "Copy"}
-        </Button>
-      </div>
+      {alias ? (
+        <div className="mt-3 flex items-center justify-between gap-2 rounded-field border border-hairline bg-card px-3 py-2.5">
+          <span className="truncate font-mono text-[12px] text-ink">
+            {alias}
+          </span>
+          <Button type="button" onClick={copy}>
+            <CopyIcon className="h-3.5 w-3.5" />
+            {copied ? "Copied" : "Copy"}
+          </Button>
+        </div>
+      ) : (
+        <>
+          <p className="mt-3 rounded-field bg-warning-bg px-3 py-2 text-[12.5px] leading-relaxed text-warning-ink">
+            We don&apos;t have an order address set up yet. Get in touch and
+            we&apos;ll sort it out before you build your cart.
+          </p>
+          {aliasDiagnostic ? (
+            <p className="mt-2 font-mono text-[11px] leading-relaxed text-ink-faint">
+              dev: {aliasDiagnostic}
+            </p>
+          ) : null}
+        </>
+      )}
 
       <figure className="mt-3">
         <div className="flex h-40 items-center justify-center gap-2 rounded-field border border-dashed border-hairline bg-sunken/60 text-ink-faint">

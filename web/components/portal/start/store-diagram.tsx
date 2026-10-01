@@ -19,8 +19,18 @@ export function StoreDiagram({
   const domain = new URL(retailer.homeUrl).hostname.replace(/^www\./, "");
 
   return (
-    <figure className="mt-3">
-      <div className="overflow-hidden rounded-field border border-hairline bg-card">
+    <figure className="mt-5">
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+        <span className="text-[10.5px] font-semibold tracking-[0.14em] text-ink-faint uppercase">
+          Next step
+        </span>
+        <span className="text-[11.5px] leading-relaxed text-ink-muted">
+          This is what you&apos;ll see when we open the {retailer.label}{" "}
+          website.
+        </span>
+      </div>
+
+      <div className="mt-2 overflow-hidden rounded-field border border-hairline bg-card">
         <div className="flex items-center gap-1.5 border-b border-hairline-soft px-4 py-2.5">
           <span className="h-2 w-2 rounded-full bg-sunken" />
           <span className="h-2 w-2 rounded-full bg-sunken" />
@@ -41,16 +51,7 @@ export function StoreDiagram({
             {store.postalCode}
           </div>
 
-          <div className="mt-4 space-y-2.5" aria-hidden>
-            <div className="h-3 w-28 rounded-full bg-sunken" />
-            <div className="flex items-center gap-2.5">
-              <div className="h-3 w-16 rounded-full bg-sunken" />
-              <div className="h-3 w-20 rounded-full bg-sunken" />
-              <div className="h-3 w-14 rounded-full bg-sunken" />
-            </div>
-          </div>
-
-          <div className="mt-4">
+          <div className="mt-5">
             <span className="inline-flex rounded-control bg-accent px-4 py-2 text-[12.5px] font-semibold text-accent-ink">
               {retailer.storeAction}
             </span>
@@ -59,7 +60,9 @@ export function StoreDiagram({
       </div>
 
       <figcaption className="mt-2 text-[11.5px] leading-relaxed text-ink-muted">
-        What you&apos;ll see at the top of the {retailer.label} website.
+        If you see{" "}
+        <span className="font-medium text-ink">{retailer.storeAction}</span> at
+        the top of the page, click it.
       </figcaption>
     </figure>
   );
