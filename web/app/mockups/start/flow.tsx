@@ -250,13 +250,22 @@ function RetailerStep({
                   : "border-hairline hover:bg-card-muted",
               )}
             >
+              <span
+                className={cn(
+                  "flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full border",
+                  selected ? "border-accent" : "border-hairline",
+                )}
+              >
+                {selected ? (
+                  <span className="h-2 w-2 rounded-full bg-accent" />
+                ) : null}
+              </span>
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-control bg-sunken text-[12px] font-semibold text-ink-muted">
                 {retailer.name.slice(0, 1)}
               </span>
-              <span className="flex-1 text-[13px] font-medium text-ink">
+              <span className="min-w-0 text-[13px] font-medium text-ink">
                 {retailer.name}
               </span>
-              <Chevron className="h-4 w-4 text-ink-faint" />
             </button>
           );
         })}

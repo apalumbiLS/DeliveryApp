@@ -5,7 +5,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Field } from "@/components/ui/field";
-import { Chevron, CopyIcon, ImageIcon } from "@/components/ui/icons";
+import { CopyIcon, ImageIcon } from "@/components/ui/icons";
 import { Input } from "@/components/ui/input";
 import { formatDistance } from "@/lib/geo";
 import { RETAILERS, type RetailerId } from "@/lib/retailers";
@@ -19,28 +19,35 @@ import {
   type RankedStore,
 } from "./types";
 
-/** The radio-card used by the site and store lists. */
+/** The radio-card used by the site, store, and retailer lists. */
 function SelectCard({
   selected,
   title,
   subtitle,
   onClick,
   dashed,
+  leading,
+  disabled,
 }: {
   selected: boolean;
   title: string;
   subtitle?: string;
   onClick: () => void;
   dashed?: boolean;
+  leading?: React.ReactNode;
+  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       aria-pressed={selected}
       className={cn(
-        "flex w-full cursor-pointer items-center gap-3 rounded-card border bg-card px-4 py-3.5 text-left transition-colors",
-        selected ? "border-accent" : "border-hairline hover:bg-card-muted",
+        "flex w-full items-center gap-3 rounded-card border bg-card px-4 py-3.5 text-left transition-colors",
+        disabled ? "cursor-not-allowed opacity-55" : "cursor-pointer",
+        selected ? "border-accent" : "border-hairline",
+        !disabled && !selected && "hover:bg-card-muted",
         dashed && !selected && "border-dashed",
       )}
     >
@@ -52,6 +59,7 @@ function SelectCard({
       >
         {selected ? <span className="h-2 w-2 rounded-full bg-accent" /> : null}
       </span>
+      {leading}
       <span className="min-w-0">
         <span className="block text-[13px] font-medium text-ink">{title}</span>
         {subtitle ? (
@@ -61,6 +69,14 @@ function SelectCard({
         ) : null}
       </span>
     </button>
+  );
+}
+
+function RetailerMark({ label }: { label: string }) {
+  return (
+    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-control bg-sunken text-[12px] font-semibold text-ink-muted">
+      {label.slice(0, 1)}
+    </span>
   );
 }
 
@@ -219,10 +235,12 @@ export function SiteStep({
 
 export function RetailerStep({
   retailers,
+  unavailable = [],
   value,
   onChange,
 }: {
   retailers: RetailerId[];
+  unavailable?: RetailerId[];
   value: RetailerId | null;
   onChange: (id: RetailerId) => void;
 }) {
@@ -235,29 +253,31 @@ export function RetailerStep({
       <div className="mt-4 space-y-2.5">
         {retailers.map((id) => {
           const retailer = RETAILERS[id];
-          const selected = id === value;
 
           return (
-            <button
+            <SelectCard
               key={id}
-              type="button"
+              selected={id === value}
+              title={retailer.label}
               onClick={() => onChange(id)}
-              aria-pressed={selected}
-              className={cn(
-                "flex w-full cursor-pointer items-center gap-3 rounded-card border bg-card px-4 py-3.5 text-left transition-colors",
-                selected
-                  ? "border-accent"
-                  : "border-hairline hover:bg-card-muted",
-              )}
-            >
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-control bg-sunken text-[12px] font-semibold text-ink-muted">
-                {retailer.label.slice(0, 1)}
-              </span>
-              <span className="flex-1 text-[13px] font-medium text-ink">
-                {retailer.label}
-              </span>
-              <Chevron className="h-4 w-4 text-ink-faint" />
-            </button>
+              leading={<RetailerMark label={retailer.label} />}
+            />
+          );
+        })}
+
+        {unavailable.map((id) => {
+          const retailer = RETAILERS[id];
+
+          return (
+            <SelectCard
+              key={id}
+              disabled
+              selected={false}
+              title={retailer.label}
+              subtitle="Coming soon"
+              onClick={() => onChange(id)}
+              leading={<RetailerMark label={retailer.label} />}
+            />
           );
         })}
       </div>

@@ -1,0 +1,21 @@
+# Excluded from Vercel deployments.
+#
+# Everything below is source material or local tooling. No build step reads any
+# of it — the app is self-contained under web/, and its @/* paths resolve there.
+#
+# Vercel already ignores node_modules, .next, .vercel, .git, .env.local and
+# .DS_Store, so none of those are repeated here.
+
+# Retailer exports, sample cart emails, and the original PDFs. ~5 MB.
+External Notes/
+
+# Architecture, ADRs, and runbooks.
+docs/
+
+# Working notes.
+ai_docs/
+
+# Local development and editor configuration.
+.devcontainer/
+.vscode/
+.devin/

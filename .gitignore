@@ -1,2 +1,6 @@
 # macOS
 .DS_Store
+
+# Devin CLI — machine-specific config only. The rest of .devin/ is shared and
+# should be committed, so this matches the local files rather than the directory.
+.devin/*.local.json

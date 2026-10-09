@@ -6,6 +6,7 @@ import { Chevron } from "@/components/ui/icons";
 import { List, ListItem } from "@/components/ui/list";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusDot } from "@/components/ui/status-dot";
+import { isRetailerId, RETAILERS } from "@/lib/retailers";
 import { createClient } from "@/lib/supabase/server";
 import {
   orderStatusLabel,
@@ -17,21 +18,18 @@ export const metadata: Metadata = {
   title: "Orders",
 };
 
-type Retailer = "homedepot" | "lowes";
-
 type OrderRow = {
   id: string;
   order_number: string;
   status: OrderStatus;
-  retailer: Retailer;
+  retailer: string;
   total_cents: number;
   created_at: string;
 };
 
-const RETAILER_LABEL: Record<Retailer, string> = {
-  homedepot: "Home Depot",
-  lowes: "Lowe's",
-};
+function retailerLabel(retailer: string) {
+  return isRetailerId(retailer) ? RETAILERS[retailer].label : retailer;
+}
 
 const money = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -84,7 +82,7 @@ export default async function PortalOrdersPage() {
                   </Badge>
                 </div>
                 <div className="mt-0.5 text-[12px] text-ink-faint">
-                  {RETAILER_LABEL[order.retailer]} ·{" "}
+                  {retailerLabel(order.retailer)} ·{" "}
                   {shortDate.format(new Date(order.created_at))}
                 </div>
               </div>

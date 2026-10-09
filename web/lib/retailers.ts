@@ -18,6 +18,12 @@ export const RETAILERS = {
     homeUrl: "https://www.lowes.com",
     storeAction: "Set as My Store",
   },
+  ace: {
+    label: "Ace Hardware",
+    homeUrl: "https://www.acehardware.com",
+    /** Unverified — Ace has no stores seeded, so this is never rendered yet. */
+    storeAction: "Set as My Store",
+  },
 } as const;
 
 export type RetailerId = keyof typeof RETAILERS;

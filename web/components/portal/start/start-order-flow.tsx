@@ -90,15 +90,18 @@ export function StartOrderFlow({
   const newAddressPoint =
     newZip && zipResolution?.zip === newZip ? zipResolution.point : null;
 
-  // Only retailers that actually have stores are offered, so seeding Home
-  // Depot later is enough to add it here.
-  const availableRetailers = useMemo(
-    () =>
-      RETAILER_IDS.filter((id) =>
-        stores.some((store) => store.retailer === id),
-      ),
-    [stores],
-  );
+  // A retailer is selectable once it has at least one store to pick up from.
+  // The rest are still listed, marked unavailable, so the page says where we're
+  // going as well as where we are. Seeding stores is what promotes one.
+  const { availableRetailers, unavailableRetailers } = useMemo(() => {
+    const hasStores = (id: RetailerId) =>
+      stores.some((store) => store.retailer === id);
+
+    return {
+      availableRetailers: RETAILER_IDS.filter(hasStores),
+      unavailableRetailers: RETAILER_IDS.filter((id) => !hasStores(id)),
+    };
+  }, [stores]);
 
   const activeRetailerId = retailerId ?? availableRetailers[0] ?? null;
 
@@ -277,6 +280,7 @@ export function StartOrderFlow({
         {step === 1 ? (
           <RetailerStep
             retailers={availableRetailers}
+            unavailable={unavailableRetailers}
             value={activeRetailerId}
             onChange={(id) => {
               setRetailerId(id);
