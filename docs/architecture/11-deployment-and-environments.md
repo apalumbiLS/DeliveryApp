@@ -67,11 +67,13 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=   # sb_publishable_...  browser-safe; RLS 
 SUPABASE_SECRET_KEY=                    # sb_secret_...  server-only, never NEXT_PUBLIC_; bypasses RLS
 
 # Mailgun
-MAILGUN_API_KEY=
-MAILGUN_SIGNING_KEY=                # inbound webhook verification
+MAILGUN_API_KEY=                    # outbound sending + the Messages API
+MAILGUN_SIGNING_KEY=                # inbound webhook verification (HMAC)
 MAILGUN_DOMAIN=                     # outbound sending domain
-MAILGUN_INBOUND_DOMAIN=             # orders.<domain>
-ORDER_ALIAS_DOMAIN=                 # used to render the customer-facing address
+ORDER_ALIAS_DOMAIN=                 # the domain customers send carts to. This is
+                                    # also the inbound domain — one value, since
+                                    # a Mailgun route only fires for a domain
+                                    # whose MX records point at Mailgun.
 
 # Twilio
 TWILIO_ACCOUNT_SID=
@@ -98,6 +100,31 @@ Two guardrails:
 
 - **`SUPABASE_SECRET_KEY` is never prefixed `NEXT_PUBLIC_`.** A `NEXT_PUBLIC_` prefix ships a value to the browser; this key bypasses all RLS. The legacy `service_role` key had the same property — the rename does not change the rule.
 - **The app asserts `APP_ENV` against key modes at startup.** A `sk_live_` Stripe key with `APP_ENV=preview` is a misconfiguration that would charge real customers from a test environment. Fail fast instead.
+
+### Swapping the Mailgun account
+
+The account in use is temporary until the client's is set up. Swapping it must stay a configuration change, never a code change — nothing in the inbound path reads a Mailgun value from anywhere but the environment.
+
+| Variable | Needed for | Changes when swapping |
+|---|---|---|
+| `MAILGUN_SIGNING_KEY` | Verifying the webhook's HMAC signature | **Yes** — it is per-account |
+| `ORDER_ALIAS_DOMAIN` | The customer-facing address, and the domain a route fires for | **Yes** — the temporary domain differs |
+| `MAILGUN_API_KEY` | Outbound sending and the Messages API | **Yes** |
+| `MAILGUN_DOMAIN` | Outbound sending domain | **Yes** |
+
+Steps, in order:
+
+1. Add the new domain to Mailgun and point its MX records at Mailgun.
+2. Create the inbound route — `match_recipient("(?P<alias>[^@]+)@<new-domain>")` with both `store(notify="…/api/webhooks/mailgun/inbound")` and `forward("…/api/webhooks/mailgun/inbound")`.
+3. Update the four variables in Vercel and in `web/.env.local`.
+4. Redeploy — Vercel bakes environment variables at build time.
+5. **Re-point the customer-facing alias.** A company's `order_alias` is a local part and does not change, but the domain customers type does. Anyone mid-order needs telling.
+6. Verify by sending a test cart and confirming an order appears.
+
+Two things to watch:
+
+- **`isMailgunConfigured()` gates the inbound route.** With the signing key unset the webhook returns a notice rather than accepting unsigned posts, so a half-finished swap fails closed instead of open.
+- **Staging must not share the new domain.** Mailgun routes are scoped per domain, so a shared domain delivers every real cart email into both environments — see [Why staging needs its own email subdomain](#why-staging-needs-its-own-email-subdomain).
 
 ---
 

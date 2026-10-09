@@ -9,7 +9,7 @@ Establish the full system architecture, data model, and phased build plan for a 
 
 ## Summary
 
-Build the systems needed for a construction-site delivery MVP: a Next.js app (three role-guarded UIs) on Supabase, with a Mailgun-driven email-cart intake that parses Home Depot / Lowe's share-cart emails into structured orders, a dispatcher console that drives the order through a guarded state machine, a driver job board with first-accept-wins dispatch, and Stripe Payment Links for collection.
+Build the systems needed for a construction-site delivery MVP: a Next.js app (three role-guarded UIs) on Supabase, with a Mailgun-driven email-cart intake that parses **Lowe's** share-cart emails into structured orders, a dispatcher console that drives the order through a guarded state machine, a driver job board with first-accept-wins dispatch, and Stripe Payment Links for collection.
 
 This document is the entry point and roadmap. Phases 1–7 below are the implementation sequence; the numbered documents in this directory expand each subsystem.
 
@@ -48,6 +48,7 @@ These five findings were derived by inspecting the real Home Depot share-cart em
 | Front end       | Next.js App Router, **one app, 3 route groups**: `/dispatch`, `/driver`, `/portal`        |
 | Hosting         | Vercel                                                                                    |
 | Email in + out  | **Mailgun** inbound routes → webhook; Mailgun for outbound                                |
+| Retailers       | **Lowe's only.** Home Depot and Ace are deferred — no parser and no seeded stores         |
 | SMS             | Twilio                                                                                    |
 | Payments        | Stripe Payment Links + webhook                                                            |
 | Background jobs | **Vercel Cron sweeps** over a notifications outbox + broadcast expiry. No workflow engine |
@@ -55,15 +56,15 @@ These five findings were derived by inspecting the real Home Depot share-cart em
 | Order identity  | **Per-company alias only**; unmatched alias → review queue                                |
 | Company model   | Company = org, **one portal login** per company                                           |
 | Auth            | Email-as-username + password (Supabase Auth)                                              |
-| Store capture   | **Dispatcher sets it manually** from a seeded store table                                 |
-| Parsing         | Deterministic parser → schema validation → LLM fallback → dispatcher review queue         |
+| Store capture   | **Customer captures it** in the portal before building the cart (ADR-0010); dispatcher confirms |
+| Parsing         | Deterministic parser → schema validation → dispatcher review queue. **LLM fallback deferred** |
 | Item metadata   | Email fields only. No enrichment API, no scraping.                                        |
 | Quote           | **Manual fee entry** by dispatcher                                                        |
 | Driver comms    | In-app job board + SMS notify; first-accept-wins                                          |
 | Customer UX     | Simplified portal: login, history, order detail/status, checkout                          |
 | Photo gates     | **Prompt but never block**; skip requires a reason                                        |
 | Parallel run    | **None.** No Slack, no Google Sheets. App is the sole system of record.                   |
-| Market          | Greenville/Spartanburg, SC → Supabase `us-east-1`                                         |
+| Market          | North Carolina → Supabase `us-east-1`                                                     |
 | Docs            | Markdown + Mermaid, committed in-repo                                                     |
 
 Each decision has a corresponding ADR in [`docs/adr/`](../adr/README.md).
@@ -74,7 +75,7 @@ Each decision has a corresponding ADR in [`docs/adr/`](../adr/README.md).
 
 ### In scope
 
-- Email alias intake → deterministic cart parse → order created
+- Email alias intake → deterministic **Lowe's** cart parse → order created
 - Dispatcher console: review queue, order board, item verification/edit, store assignment, fee entry, status transitions, complete-checkout-on-behalf, payment link send
 - Customer portal: login, order list + history, order detail with status timeline, checkout wizard (verify items → address + instructions → fees → accept → pay)
 - Driver app (mobile-first): job board, accept, status advance, photo upload (skippable with reason)
@@ -86,7 +87,7 @@ Each decision has a corresponding ADR in [`docs/adr/`](../adr/README.md).
 
 Designed for, not built. Each item's extension hook is documented in [12-deferred-and-extension-points.md](12-deferred-and-extension-points.md).
 
-Item substitution · cancellation UI · automated customer status fan-out · multi-store orders · parts catalog / concierge procurement · smart iFrame · chat experience · aisle/bay data · product enrichment API · native mobile apps · driver payouts (Stripe Connect) · fee rule engine · Slack integration
+Item substitution · cancellation UI · automated customer status fan-out · multi-store orders · parts catalog / concierge procurement · smart iFrame · chat experience · aisle/bay data · product enrichment API · native mobile apps · driver payouts (Stripe Connect) · fee rule engine · Slack integration · **Home Depot and Ace parsers** · **LLM fallback tier**
 
 ---
 
@@ -173,21 +174,16 @@ stateDiagram-v2
 ```mermaid
 flowchart TD
     A[Inbound email arrives] --> B{Retailer identified<br/>from sender domain}
-    B -->|order.homedepot.com| C[HomeDepotCartParser]
-    B -->|lowes.com| D[LowesCartParser]
-    B -->|unknown| G[LLM extractor]
-    C --> E{Schema valid?<br/>zod}
-    D --> E
+    B -->|e.lowes.com| D[LowesCartParser]
+    B -->|no parser for that retailer| K["Email → needs_review<br/>no order created"]
+    D --> E{zod + structural<br/>validation}
     E -->|yes| F[Create order → received]
-    E -->|no| G
-    G --> H{Schema valid?}
-    H -->|yes| F
-    H -->|no| I[Order → needs_review]
+    E -->|no| I[Order → needs_review]
     I --> J[Dispatcher review queue]
-    J -->|paste/enter items| F
+    J -->|correct items| F
 ```
 
-Every attempt — deterministic or LLM — is recorded in `parse_attempts` with parser version, output, and errors, so template drift is visible rather than silent.
+Every attempt — deterministic or manual — is recorded in `parse_attempts` with parser version, output, and errors, so template drift is visible rather than silent. The LLM tier is deferred; when it lands it slots in between `E -->|no|` and `I`.
 
 ---
 
@@ -361,8 +357,8 @@ Phase 0 self-verification, with the evidence for each item.
 
 ### Gaps this verification did not close
 
-- **Multi-item carts are unverified.** Both sample emails contain exactly one item, so the parser's row-repetition assumption is inferred, not observed. A multi-item fixture is required before the parser is considered done.
-- **The Lowe's format is entirely unknown.** No sample has been seen.
+- **The Lowe's sample is a single cart.** It has 3 items, which confirms multi-row carts — but it is one sample. A second cart, ideally with a different item count, would strengthen the extractor's evidence before it is trusted.
+- **The Lowe's email carries no prices.** Captured and analysed: it contains no money at all — no line totals, no subtotal, no tax. Reconciliation therefore cannot run for Lowe's, so validation is structural and the dispatcher enters the materials cost by hand. See [06-cart-parsing](06-cart-parsing.md).
 
 ---
 
@@ -370,9 +366,9 @@ Phase 0 self-verification, with the evidence for each item.
 
 | Risk                                                                          | Mitigation                                                                                                       |
 | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| **No Lowe's sample email** — `LowesCartParser` cannot be specified accurately | LLM fallback covers Lowe's on day one; capture a real Lowe's email before Phase 2 completes                      |
-| **No domain owned yet** — blocks Mailgun inbound entirely                     | Explicit Phase 1 prerequisite; this document uses `orders.example.com` placeholders                              |
-| Home Depot template drift silently breaks parsing                             | Golden-file tests + versioned parser + `parse_attempts` telemetry + review queue as backstop                     |
+| **Lowe's gives no prices, so nothing reconciles arithmetically**               | Validation is structural — three independently-derived item counts must agree — and the review queue is the human backstop |
+| **An unsupported retailer's cart is invisible in the UI** — it lands in `needs_review` with no order, and unattributed handling is out of scope | Home Depot is unselectable in the portal, so it should be rare. Recorded as a known gap rather than left implicit |
+| Template drift silently breaks parsing                                        | Golden-file tests + versioned parser + `parse_attempts` telemetry + review queue as backstop                     |
 | Mailgun `forward()` retries if the webhook is slow                            | Persist the email before parsing, re-process duplicates that are still pending, and keep the parser fast         |
 | Job-accept race (two drivers accept simultaneously)                           | Enforced by the row-locking state transition on the order, never in app code                                     |
 | PII exposure (addresses, phones, receipt photos)                              | RLS on every table, private storage bucket, signed URLs only                                                     |
@@ -386,7 +382,7 @@ Phase 0 self-verification, with the evidence for each item.
 
 To resolve before Phase 2:
 
-1. **A real Lowe's share-cart email** — required to specify the second parser.
-2. **Domain name** — required for Mailgun inbound routes and MX records.
-3. **Stripe, Twilio, and Mailgun accounts** — Supabase and Vercel already exist.
-4. **Upstate SC store list** — confirm the radius and which Lowe's / Home Depot locations to seed.
+1. **A temporary Mailgun account** — API key, signing key, and inbound domain, set as environment variables. Replacing it with the client's is a config-only change; see [11-deployment](11-deployment-and-environments.md#swapping-the-mailgun-account).
+2. **A second Lowe's cart** — one sample is thin evidence for the extractor.
+3. **Stripe and Twilio accounts** — Supabase and Vercel already exist; Mailgun is temporary.
+4. **A domain, eventually** — the customer-facing alias address changes when the client's account replaces the temporary one.

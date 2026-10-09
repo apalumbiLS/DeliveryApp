@@ -60,6 +60,26 @@ Each entry below states the hook that already exists. If an item has no hook, th
 
 ## Intake
 
+### Home Depot and Ace parsers
+
+| | |
+|---|---|
+| **What** | Parsers for the two retailers that are not live. Lowe's is the only retailer a customer can select — Home Depot and Ace show as "Coming soon" on the start-an-order page |
+| **Why deferred** | Neither has seeded store locations, so neither can be selected or dispatched to. Building a parser for a retailer nobody can order from is speculative work that would drift before it was ever used |
+| **Hook** | The `CartParser` interface is retailer-agnostic and selected by sender domain, so adding one is a new file plus a fixture — no change to the pipeline, the schema, or the console |
+| **To build** | Seed the retailer's stores, then implement its parser against a real sample. **Home Depot's field map is already verified** against two samples and kept as reference in [06-cart-parsing](06-cart-parsing.md) — the analysis exists, only the code does not |
+| **Size** | Small for Home Depot — field map verified, samples in hand. Unknown for Ace, which has no sample |
+
+### LLM fallback tier
+
+| | |
+|---|---|
+| **What** | A second extraction tier handling template drift and retailers we have not enumerated, used only when the deterministic parser fails |
+| **Why deferred** | The deterministic parser is exact and free, and a failure already lands in the review queue where a human resolves it. The LLM earns its place once real drift is observed rather than anticipated |
+| **Hook** | The `CartParser` interface and the shared `CartSchema` are already the contract it must satisfy; `parse_attempts.strategy` already has an `llm` value, and migration `0004` removed the constraint that would have blocked a second attempt per email |
+| **To build** | An implementation of the interface calling a provider, plus a recorded-response contract test so CI never calls a live model |
+| **Size** | Small-to-medium. **It must fit a time budget in the webhook request** — ADR-0009 chose inline intake on the assumption that only this rare path is slow |
+
 ### In-app cart building (product catalog)
 
 |                  |                                                                                                                                                  |
