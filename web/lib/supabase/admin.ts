@@ -3,7 +3,8 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 /**
  * Secret-key client. **Bypasses RLS entirely.**
  *
- * Used for exactly one thing: `auth.admin.*`. `auth.users` is not reachable
+ * Used by exactly two kinds of caller: `auth.admin.*`, and webhook route
+ * handlers, which have no user session for RLS to scope to. `auth.users` is not reachable
  * through PostgREST, so creating a user and reading their email both require
  * this key. Everything else — every `profiles` read and write — goes through
  * the RLS-scoped client in `lib/supabase/server.ts`, where the database decides
@@ -11,7 +12,9 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
  *
  * Call sites are enumerated in
  * docs/architecture/10-auth-and-permissions.md#service-role-usage. Every one of
- * them verifies the caller's role first: RLS will not do it for you here.
+ * user-initiated one verifies the caller's role first: RLS will not do it here.
+ * A webhook handler has no role to check, because it has no user — its
+ * authentication is the provider's signature, verified before anything runs.
  *
  * This module must never be imported by a client component, and callers in a
  * route group should reach it through `lib/admin/*` rather than directly.

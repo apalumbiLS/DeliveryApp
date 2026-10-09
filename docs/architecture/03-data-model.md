@@ -66,6 +66,7 @@ erDiagram
 | `notification_status`       | `queued`, `sent`, `delivered`, `failed`, `bounced`                                                                                                                                                                              |
 | `payment_status`            | `created`, `sent`, `paid`, `expired`, `refunded`                                                                                                                                                                                |
 | `order_intent_status`       | `open`, `matched`, `expired`                                                                                                                                                                                                    |
+| `delivery_size`             | `car`, `pickup`, `truck` — the vehicle class the sizing fee is keyed to; migration `0006`                                                                                                                                        |
 
 `cancelled` and `substituted` exist from day one with no UI. That is what makes those features additive later. See [12-deferred-and-extension-points](12-deferred-and-extension-points.md).
 
@@ -221,6 +222,7 @@ One row per extraction attempt — the telemetry that makes template drift visib
 | `delivery_address`          | jsonb                                    | Snapshot at checkout                                              |
 | `delivery_instructions`     | text                                     |                                                                   |
 | `site_id`                   | uuid FK → company_sites                  | Provenance only                                                   |
+| `delivery_size`             | delivery_size                            | `car` / `pickup` / `truck` — the vehicle class the sizing fee is keyed to. Null until a dispatcher picks one; added by migration `0006` |
 | `assigned_driver_id`        | uuid FK → profiles                       |                                                                   |
 | `customer_confirmed_at`     | timestamptz                              |                                                                   |
 | `confirmed_by_profile_id`   | uuid FK → profiles                       | Set when a dispatcher completes checkout on the customer's behalf |

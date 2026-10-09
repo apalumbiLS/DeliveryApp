@@ -2,7 +2,7 @@
 
 How a customer's shared cart becomes a row in `inbound_emails`.
 
-> **Status:** Planned design. Not yet implemented. Depends on the domain prerequisite below.
+> **Status:** Implemented — `app/api/webhooks/mailgun/inbound/route.ts` and `lib/intake/`. No real mail flows yet: the domain prerequisite below is still outstanding, so the route is exercised by posting fixtures at it.
 
 ---
 
@@ -83,7 +83,8 @@ A low-priority `catch_all()` route handles mail to unknown local parts — see [
 | Endpoint         | `POST /api/webhooks/mailgun/inbound`                                                                                    |
 | Content type     | `application/x-www-form-urlencoded`, or `multipart/form-data` when attachments are present                              |
 | Authentication   | Mailgun HMAC signature — see below                                                                                      |
-| Success response | `200` with an empty body                                                                                                |
+| Success response | `200` with the outcome as JSON — one of `parsed`, `needs_review`, `duplicate`, `unattributed`, `unsupported_retailer`, `not_authentic` |
+| Failure response | `406` when the signature does not verify; `500` when our own work failed, so Mailgun retries a delivery we never recorded |
 | Target latency   | Under Mailgun's timeout. The deterministic path is sub-second; the LLM fallback (when enabled) runs under a time budget |
 
 ### Payload fields we consume
@@ -103,15 +104,13 @@ A low-priority `catch_all()` route handles mail to unknown local parts — see [
 
 ### Signature verification
 
-Mailgun signs every `forward()` request with HMAC-SHA256 over `timestamp` + `token` using the account's signing key.
-
-Reject the request unless **all** of the following hold:
-
-1. `signature` matches the computed HMAC (constant-time comparison).
-2. `timestamp` is within a tolerance window (reject stale requests — this is the replay guard).
-3. The `(timestamp, token)` pair has not been seen before.
+Mailgun signs every `forward()` request with HMAC-SHA256 over `timestamp` + `token` using the account's signing key. Reject unless the signature matches (constant-time comparison) **and** the timestamp is within five minutes of now.
 
 Failure returns `406` and writes nothing.
+
+**There is no single-use token store**, and that is deliberate rather than an oversight. Mailgun retries a delivery when the endpoint returns a non-2xx, and [ADR-0009](../adr/0009-inline-intake-and-cron-sweeps.md) makes those retries the recovery path for an email we failed to record. If a retry reuses its timestamp and token — which Mailgun documents neither way — a single-use check would reject exactly the retries the design depends on, and a real cart would be lost. Losing an order is worse than the replay window.
+
+That leaves a residual hole worth naming: the signature covers the timestamp and token, **not the payload**, so a captured request could in principle be replayed with a different body inside the window. The window bounds it. Add the token store once Mailgun's retry behaviour is confirmed against a real account.
 
 ---
 
@@ -146,11 +145,27 @@ sequenceDiagram
 
 Parsing runs **inline**, before the `200` is returned. The deterministic path is sub-second, so this costs nothing on the common path; a failure is recorded and lands in the review queue rather than being retried blindly.
 
+### The order the checks run in
+
+Each is cheaper than the one after it, and the order is deliberate:
+
+1. **Record the raw email.** Always, before interpreting anything — that is what makes a parser fix replayable over history.
+2. **Attribute it to a company**, from the recipient alias. The retailer sends every customer's cart from the same address, so the sender identifies nobody.
+3. **Select a parser** by sender domain. No parser means **no order at all**, not even a `needs_review` one — the retailer value would be a guess. The email is still recorded.
+4. **Require the retailer to have signed it** (see [Sender authenticity](#sender-authenticity)).
+5. **Parse**, record the attempt, and create the order — `received` when it parsed, `needs_review` when it did not. The customer's cart is never silently dropped.
+
+An **order intent** is claimed last, and only if it is still open, so two carts arriving together cannot both take the same store and address.
+
 ---
 
 ## Idempotency
 
-Mailgun retries on non-2xx and can deliver duplicates. `inbound_emails.mailgun_message_id` is unique, and the insert uses `ON CONFLICT DO NOTHING`.
+Mailgun retries on non-2xx and can deliver duplicates. `inbound_emails.mailgun_message_id` is unique, and the insert relies on it.
+
+**What that column actually holds:** the email's own `Message-ID` header. Mailgun's `forward()` payload carries **no message id of its own** — the documented fields are signature, timestamp, token, subject, sender, from, recipient, message-headers, and the bodies. The `Message-ID` is stable across a redelivery and unique per email, which is precisely what an idempotency key needs. A message without one falls back to a SHA-256 of its recipient, subject, and body, which is also stable across a redelivery.
+
+The column name is a legacy of the assumption that Mailgun would supply one. It is the idempotency key, not a Mailgun identifier.
 
 A retry is treated as **recovery, not a no-op**:
 
@@ -163,10 +178,14 @@ Order creation is idempotent on top of this: `orders.inbound_email_id` is unique
 
 ## Sender authenticity
 
-Anyone can send mail to our alias. Two independent checks:
+Anyone can send mail to our alias, and a `From` header is free to forge. Two checks, in this order:
 
-1. **Mailgun verifies DKIM at the edge** and records the result in `message-headers`. We check that the message was signed by the retailer's domain (`order.homedepot.com` or the Lowe's equivalent) and reject unsigned or mismatched messages.
-2. **Retailer identification for parser selection** uses the sender domain. An unverified sender must never select a parser.
+1. **Retailer identification by sender domain**, using a dot boundary — `host === domain || host.endsWith('.' + domain)`. A bare `endsWith("lowes.com")` would also accept `notlowes.com`, which is how a spoofed sender gets a parser applied to it. An unrecognised sender never selects a parser.
+2. **A DKIM signature under that same domain.** The message must carry a `DKIM-Signature` whose `d=` is the parser's declared domain or a subdomain of it.
+
+The second check is a **weak signal, deliberately and not by accident**: a `DKIM-Signature` header can itself be forged, so its presence is not proof. Verifying it properly means fetching the selector's public key from DNS and re-canonicalising the message, which is out of scope for the MVP. What it does establish is that the message was prepared by something that knows the retailer's DKIM conventions, which a casual forgery will not.
+
+A message failing either check is stored with `processing_status = 'ignored'` and never becomes an order. The remaining defence is that a company's order alias is not public: an attacker has to know one to try at all.
 
 A message that fails DKIM is stored with `processing_status = 'ignored'` for visibility but never becomes an order. This is the anti-spoofing boundary: without it, a crafted email could fabricate an order and a driver would be dispatched to buy materials with no legitimate cart behind it.
 
