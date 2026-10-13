@@ -35,15 +35,9 @@ const STEP_COUNT = 5;
 export function StartOrderFlow({
   sites,
   stores,
-  alias,
-  aliasDiagnostic,
 }: {
   sites: FlowSite[];
   stores: FlowStore[];
-  /** The full customer-facing order address, or null when it isn't configured. */
-  alias: string | null;
-  /** Names the missing half of the address. Development only. */
-  aliasDiagnostic?: string | null;
 }) {
   const defaultSite = sites.find((site) => site.isDefault) ?? sites[0] ?? null;
 
@@ -330,8 +324,7 @@ export function StartOrderFlow({
           <BuildShareStep
             retailerId={activeRetailerId}
             store={activeEntry}
-            alias={intentId && alias ? intentAddress : null}
-            aliasDiagnostic={aliasDiagnostic}
+            alias={intentId ? intentAddress : null}
           />
         ) : null}
       </section>

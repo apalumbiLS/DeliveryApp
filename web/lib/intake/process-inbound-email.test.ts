@@ -170,7 +170,7 @@ describe("signed Mailgun intake", () => {
   test("a token address belongs to the company but never claims its site yet", async () => {
     const db = withCompany();
     withIntent(db);
-    const recipient = `cart-${token}@${domain}`;
+    const recipient = `delivery+${token}@${domain}`;
     const first = await run(db, inbound({ recipient }));
     const second = await run(
       db,
@@ -181,6 +181,18 @@ describe("signed Mailgun intake", () => {
     expect(db.inbound_emails).toHaveLength(2);
     expect(db.order_intents[0].status).toBe("open");
     expect(db.orders).toHaveLength(0);
+  });
+
+  test("previously issued cart- addresses still identify their intent", async () => {
+    const db = withCompany();
+    withIntent(db);
+    const result = await run(
+      db,
+      inbound({ recipient: `cart-${token}@${domain}` }),
+    );
+    expect(result.status).toBe("provisional");
+    expect(db.inbound_emails[0].company_id).toBe("company-1");
+    expect(db.order_intents[0].status).toBe("open");
   });
 
   test("one Message-ID addressed to two companies records both", async () => {

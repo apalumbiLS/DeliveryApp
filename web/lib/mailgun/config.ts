@@ -51,6 +51,13 @@ export function isInboundAddressReady(
   );
 }
 
+export function sharedOrderAddress(
+  config: InboundAddressConfig = inboundAddressConfig(),
+): string | null {
+  const domain = config.domain?.trim().toLowerCase();
+  return domain && isInboundAddressReady(config) ? `delivery@${domain}` : null;
+}
+
 export function companyOrderAddress(
   orderAlias: string | null,
   config: InboundAddressConfig = inboundAddressConfig(),
@@ -61,6 +68,7 @@ export function companyOrderAddress(
     alias.length <= 64 &&
     /^[a-z0-9][a-z0-9.+_-]*$/.test(alias) &&
     !alias.startsWith("cart-") &&
+    !alias.startsWith("delivery+") &&
     domain &&
     isInboundAddressReady(config)
     ? `${alias}@${domain}`
@@ -73,6 +81,6 @@ export function intentOrderAddress(
 ): string | null {
   const domain = config.domain?.trim().toLowerCase();
   return /^[0-9a-f]{32}$/.test(token) && domain && isInboundAddressReady(config)
-    ? `cart-${token}@${domain}`
+    ? `delivery+${token}@${domain}`
     : null;
 }

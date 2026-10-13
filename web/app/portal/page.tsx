@@ -5,7 +5,7 @@ import { button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Chevron } from "@/components/ui/icons";
 import { StatusDot } from "@/components/ui/status-dot";
-import { companyOrderAddress } from "@/lib/mailgun/config";
+import { sharedOrderAddress } from "@/lib/mailgun/config";
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 
@@ -16,21 +16,16 @@ export const metadata: Metadata = {
 export default async function PortalHomePage() {
   const supabase = await createClient();
 
-  // RLS scopes this to the signed-in customer's company.
-  const [ordersResult, companyResult] = await Promise.all([
-    supabase
-      .from("orders")
-      .select("order_number")
-      .eq("status", "awaiting_customer")
-      .order("created_at", { ascending: false })
-      .limit(1),
-    supabase.from("companies").select("order_alias").maybeSingle(),
-  ]);
+  // RLS scopes the orders query to the signed-in customer's company.
+  const { data: orders } = await supabase
+    .from("orders")
+    .select("order_number")
+    .eq("status", "awaiting_customer")
+    .order("created_at", { ascending: false })
+    .limit(1);
 
-  const awaiting = ordersResult.data?.[0];
-  const orderAlias =
-    (companyResult.data as { order_alias: string } | null)?.order_alias ?? null;
-  const orderAddress = companyOrderAddress(orderAlias);
+  const awaiting = orders?.[0];
+  const orderAddress = sharedOrderAddress();
 
   return (
     <div className="space-y-3">
@@ -41,15 +36,15 @@ export default async function PortalHomePage() {
         {orderAddress ? (
           <>
             <p className="mt-1.5 text-[12.5px] leading-relaxed text-ink-muted">
-              Build a cart at Lowe&apos;s. Use Share Cart to send it to your
-              company&apos;s address. Don&apos;t buy it at Lowe&apos;s.
+              Build a cart at Lowe&apos;s. Use Share Cart to send it to our
+              shared pilot address. Don&apos;t buy it at Lowe&apos;s.
             </p>
             <p className="mt-3 rounded-field border border-hairline bg-card-muted px-3 py-2 font-mono text-[12px] break-all text-ink">
               {orderAddress}
             </p>
             <p className="mt-2 text-[12px] leading-relaxed text-ink-muted">
-              Our dispatcher will review the items and contact you for the job
-              site, store, and price details.
+              Our dispatcher will confirm your company, review the items, and
+              contact you for the job site, store, and price details.
             </p>
             <Link
               href="/portal/start"

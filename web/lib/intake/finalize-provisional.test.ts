@@ -14,13 +14,13 @@ const parsed = parseCart(fixture);
 if (!parsed.ok) throw new Error("Lowe's fixture must parse");
 const cart = parsed.cart;
 
-function setup(intentStatus = "open") {
+function setup(intentStatus = "open", prefix = "delivery+") {
   const db = emptyDatabase();
   db.companies.push({ id: "company-1", active: true });
   db.inbound_emails.push({
     id: "email-1",
     company_id: "company-1",
-    recipient: `cart-${"a".repeat(32)}@${domain}`,
+    recipient: `${prefix}${"a".repeat(32)}@${domain}`,
     review_status: "pending",
     order_id: null,
   });
@@ -71,6 +71,12 @@ describe("finalization RPC contract (mocked, not SQL execution)", () => {
     expect(calls[0].params.p_intent_id).toBe("intent-1");
     expect(calls[0].params.p_reviewer_id).toBe("reviewer-1");
     expect(calls[0].params.p_items).toEqual(cart.items);
+  });
+
+  test("a previously issued cart- address can still claim its intent", async () => {
+    const { calls, approve } = setup("open", "cart-");
+    await approve();
+    expect(calls[0].params.p_intent_id).toBe("intent-1");
   });
 
   test("a consumed intent belongs to the company but supplies no site", async () => {

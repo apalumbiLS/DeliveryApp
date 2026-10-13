@@ -2,7 +2,7 @@
 
 Operating the delivery platform, order by order.
 
-> **Status:** Pilot intake and inbound review are being prepared; migration `0009` is not applied. The delivery, checkout and payment sections below describe future behavior, **not** capabilities available for the client test. See [00-overview](../architecture/00-overview.md).
+> **Status:** A live shared-address Lowe's cart was manually approved into an order after migration `0009` was applied. The optional `delivery+<token>` address requires migration `0010` and a separate live test. The delivery, checkout and payment sections below describe future behavior, **not** capabilities available for the client test. See [00-overview](../architecture/00-overview.md).
 >
 > This replaces the low-tech Google Sheets + Slack runbook in `External Notes/Low Tech Flow.pdf`. That process is retired.
 
@@ -43,7 +43,7 @@ flowchart LR
 
 **Where:** `/dispatch/review`
 
-Inbound emails enter the **same worklist** as orders, but do not automatically become orders. A Lowe's email with validated line items appears as a **provisional preview**, since a From address or DKIM header alone does not authenticate the sender. Verify the source and company before approving; approval runs the prepared transactional finalization function once migration `0009` is applied. An unknown address can be attached to a company only after off-platform verification, or dismissed. A failed parse shows its reason and original email; it **cannot** be approved as a valid item list. Request a fresh cart or wait for a later correction tool. No driver job is created from a provisional email.
+Inbound emails enter the **same worklist** as orders, but do not automatically become orders. A Lowe's email with validated line items appears as a **provisional preview**, since a From address or DKIM header alone does not authenticate the sender. Verify the source and company before approving; approval runs the transactional finalization function. New `delivery+` addresses require migration `0010` for their saved site/store to be claimed. An unknown address can be attached to a company only after off-platform verification, or dismissed. A failed parse shows its reason and original email; it **cannot** be approved as a valid item list. Request a fresh cart or wait for a later correction tool. No driver job is created from a provisional email.
 
 ### Resolving a failed parse
 

@@ -53,7 +53,7 @@ These five findings were derived by inspecting the real Home Depot share-cart em
 | Payments        | Stripe Payment Links + webhook                                                            |
 | Background jobs | **Vercel Cron sweeps** over a notifications outbox + broadcast expiry. No workflow engine |
 | Intake paths    | Stable company Mailgun address is enough; optional pre-cart portal flow; no live checkout |
-| Order identity  | Stable plus-tag local part per company; optional portal one-use addresses coded in migration `0008` |
+| Order identity  | Shared `delivery@` pilot address (dispatcher assigns company); optional portal `delivery+<token>` one-use addresses via migrations `0008`/`0010` |
 | Company model   | Company = org, **one portal login** per company                                           |
 | Auth            | Email-as-username + password (Supabase Auth)                                              |
 | Store capture   | Customer supplies it in optional portal flow; dispatcher collects it for direct-email orders |
@@ -318,7 +318,7 @@ Next.js/Bun and Supabase schema are scaffolded; the pilot has North Carolina Low
 
 ### Phase 2 — Email intake + parsing _(highest risk — deliberately early)_
 
-Lowe's parser, signed Mailgun `forward()` handler, recipient-domain validation and one-use portal addresses exist in code (the last requires migration `0008`). Route the verified inbound domain to that **single parsed-email callback**; optional `store()` has no `notify` URL. Provisional parsing, a same-queue exception view, and an atomic SQL finalization contract are drafted in Phase 3; **migration `0009` and real Mailgun payload behavior are not verified**. Keep intake readiness off until the client pilot's real receiving test passes; Home Depot and AI fallback are deferred.
+A real Lowe's cart reached the signed Mailgun webhook and provisional dispatcher review; the user manually approved it into an order using applied migration `0009`. The optional portal now generates `delivery+<token>` addresses, but migration `0010` and a live token-address test remain. Keep intake readiness off until migration `0010` and the `delivery+` Mailgun route are ready, then enable it only for a controlled portal-token test; Home Depot and AI fallback are deferred.
 
 ### Phase 3 — Dispatcher console
 

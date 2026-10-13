@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
   companyOrderAddress,
   intentOrderAddress,
+  sharedOrderAddress,
   isInboundAddressReady,
 } from "./config";
 
@@ -14,6 +15,13 @@ const ready = {
 const companyAlias = "things.dispatch+acme-construction";
 
 describe("customer-facing inbound address", () => {
+  test("shows the shared pilot address only after intake is ready", () => {
+    expect(sharedOrderAddress(ready)).toBe(
+      "delivery@inbound.prototype.example",
+    );
+    expect(sharedOrderAddress({ ...ready, ready: "false" })).toBeNull();
+  });
+
   test("keeps the company's plus-tag local part", () => {
     const address = companyOrderAddress(companyAlias, ready);
     expect(address).toBe(
@@ -39,12 +47,13 @@ describe("customer-facing inbound address", () => {
     expect(companyOrderAddress("bad@other-domain", ready)).toBeNull();
     expect(companyOrderAddress("a".repeat(65), ready)).toBeNull();
     expect(companyOrderAddress("cart-forged", ready)).toBeNull();
+    expect(companyOrderAddress("delivery+forged", ready)).toBeNull();
   });
 
   test("formats only a ready, opaque one-use intent address", () => {
     const token = "a".repeat(32);
     expect(intentOrderAddress(token, ready)).toBe(
-      `cart-${token}@inbound.prototype.example`,
+      `delivery+${token}@inbound.prototype.example`,
     );
     expect(intentOrderAddress(token, { ...ready, ready: "false" })).toBeNull();
     expect(intentOrderAddress("short", ready)).toBeNull();

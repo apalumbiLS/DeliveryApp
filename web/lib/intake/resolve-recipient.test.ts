@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test";
 
-import { inboundDedupeKey, parseInboundRecipient } from "./resolve-recipient";
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+import { emptyDatabase, fakeSupabase } from "./__fixtures__/fake-supabase";
+import {
+  inboundDedupeKey,
+  parseInboundRecipient,
+  resolveRecipient,
+} from "./resolve-recipient";
 
 const domain = "orders.example.com";
 const messageId = "<message@lowes.com>";
@@ -25,6 +32,31 @@ describe("inbound recipient", () => {
       undefined,
     );
     expect(missingDomain).toBeNull();
+  });
+
+  test("resolves both new and previously issued token addresses", async () => {
+    const db = emptyDatabase();
+    const token = "a".repeat(32);
+    db.order_intents.push({
+      id: "intent-1",
+      company_id: "company-1",
+      email_token: token,
+    });
+    db.companies.push({ id: "company-1", active: true });
+    const client = fakeSupabase(db) as unknown as SupabaseClient;
+    for (const prefix of ["delivery+", "cart-"]) {
+      const result = await resolveRecipient(
+        client,
+        `${prefix}${token}@${domain}`,
+        domain,
+      );
+      expect(result.kind).toBe("intent");
+      if (result.kind === "intent") expect(result.intent.id).toBe("intent-1");
+    }
+    expect(
+      (await resolveRecipient(client, `delivery+invalid@${domain}`, domain))
+        .kind,
+    ).toBe("unattributed");
   });
 
   test("dedupes retries to one recipient but not separate recipients", () => {

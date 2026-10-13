@@ -88,7 +88,7 @@ The construction company. Owns the inbound email alias and the portal login.
 | `notes`         | text                          |                                                                                          |
 | `active`        | boolean NOT NULL DEFAULT true |                                                                                          |
 
-`order_alias` is `citext` and unique for stable company addresses. Optional portal-generated addresses use `order_intents.email_token` instead. Migration `0008` reserves the `cart-` local-part prefix so a company alias cannot masquerade as an intent. The receiving domain must also match the configured domain before attribution.
+`order_alias` is `citext` and unique for stable company addresses. Optional portal-generated addresses use `order_intents.email_token` instead. Migration `0008` reserves the legacy `cart-` prefix and new migration `0010` reserves `delivery+` for opaque intent addresses. The receiving domain must also match the configured domain before attribution.
 
 ### `profiles`
 
@@ -182,7 +182,7 @@ Every message that reaches the inbound webhook, stored before any interpretation
 | `order_id`           | uuid FK → orders                                     | Null until dispatcher approval finalizes an order     |
 | `received_at`        | timestamptz NOT NULL                                 |                                                        |
 
-Storing the HTML email and headers before interpreting them makes the parser re-runnable. The full raw MIME is **not** currently stored in `raw_storage_path`; optional Mailgun `store()` (without `notify`) is the temporary backup. Parsed contents are provisional until a dispatcher approves; migration `0009` defines the one-call SQL finalization contract for order, items, intent claim, audit event and inbound link. That SQL is not yet DB-tested.
+Storing the HTML email and headers before interpreting them makes the parser re-runnable. The full raw MIME is **not** currently stored in `raw_storage_path`; optional Mailgun `store()` (without `notify`) is the temporary backup. Parsed contents are provisional until a dispatcher approves; migration `0009` defines the one-call SQL finalization contract for order, items, intent claim, audit event and inbound link. The user applied `0009` and approved one real cart. Migration `0010` updates the intent-recipient check and has not been applied or DB-tested.
 
 ### `parse_attempts`
 
@@ -288,7 +288,7 @@ A draft captured by the portal's start-an-order flow: the site, retailer, and st
 | `delivery_address`          | jsonb                                       | Snapshot; set even for a new address, so the intent stands alone |
 | `retailer`                  | retailer NOT NULL                           |                                                             |
 | `retailer_store_id`         | uuid FK → retailer_stores                   |                                                             |
-| `email_token`               | text UNIQUE, nullable                      | Migration `0008`: 32 lowercase hex characters; routed via `cart-<token>@<configured-domain>` |
+| `email_token`               | text UNIQUE, nullable                      | Migration `0008`: 32 lowercase hex characters; new addresses use `delivery+<token>@<configured-domain>` after migration `0010`; legacy `cart-<token>` remains recognized |
 | `status`                    | order_intent_status NOT NULL DEFAULT 'open' | Only `open` is written by the portal                        |
 | `order_id`                  | uuid FK → orders                            | Set when a cart email is matched to this intent             |
 | `matched_at`                | timestamptz                                 |                                                             |

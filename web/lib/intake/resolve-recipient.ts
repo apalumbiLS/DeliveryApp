@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-const TOKEN_ADDRESS = /^cart-([0-9a-f]{32})$/;
+const TOKEN_ADDRESS = /^(?:delivery\+|cart-)([0-9a-f]{32})$/;
 
 export type InboundIntent = {
   id: string;
@@ -64,7 +64,7 @@ export async function resolveRecipient(
     };
   }
 
-  if (alias.startsWith("cart-")) {
+  if (alias.startsWith("delivery+") || alias.startsWith("cart-")) {
     const token = TOKEN_ADDRESS.exec(alias)?.[1];
     if (!token) {
       return { kind: "unattributed", alias, reason: "Invalid cart address" };

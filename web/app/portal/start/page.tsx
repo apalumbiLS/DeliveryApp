@@ -3,10 +3,7 @@ import type { Metadata } from "next";
 import { StartOrderFlow } from "@/components/portal/start/start-order-flow";
 import type { FlowSite, FlowStore } from "@/components/portal/start/types";
 import { Card } from "@/components/ui/card";
-import {
-  companyOrderAddress,
-  isInboundAddressReady,
-} from "@/lib/mailgun/config";
+import { isInboundAddressReady } from "@/lib/mailgun/config";
 import { isRetailerId } from "@/lib/retailers";
 import { createClient } from "@/lib/supabase/server";
 
@@ -59,7 +56,7 @@ export default async function PortalStartPage() {
 
   const supabase = await createClient();
 
-  const [sitesResult, storesResult, companyResult] = await Promise.all([
+  const [sitesResult, storesResult] = await Promise.all([
     supabase
       .from("company_sites")
       .select(
@@ -74,7 +71,6 @@ export default async function PortalStartPage() {
       )
       .eq("active", true)
       .order("name"),
-    supabase.from("companies").select("order_alias").maybeSingle(),
   ]);
 
   // Every query here runs through RLS on the customer's own session, so the
@@ -113,32 +109,8 @@ export default async function PortalStartPage() {
       phone: row.phone,
     }));
 
-  // `order_alias` is the local part only; the domain is configuration, because
-  // staging and production send from different domains. With either half
-  // missing there is no address to show, and showing a broken one would send a
-  // customer's cart nowhere.
-  const orderAlias =
-    (companyResult.data as unknown as { order_alias: string } | null)
-      ?.order_alias ?? null;
-  const alias = companyOrderAddress(orderAlias);
-
-  // The customer-facing message stays vague on purpose. This names the missing
-  // half for whoever is setting the environment up, and is never rendered in
-  // production.
-  const aliasDiagnostic =
-    process.env.NODE_ENV === "production"
-      ? null
-      : [
-          orderAlias ? null : "companies.order_alias is empty",
-          isInboundAddressReady()
-            ? null
-            : "Mailgun intake is not confirmed ready (check ORDER_INTAKE_READY, domain, and signing key)",
-          companyResult.error
-            ? `companies query failed: ${companyResult.error.message}`
-            : null,
-        ]
-          .filter(Boolean)
-          .join("; ") || null;
+  // The receiving domain is checked above. The final address comes from the
+  // saved intent, not the company's stable email-only alias.
 
   if (sitesResult.error || storesResult.error) {
     return (
@@ -169,12 +141,5 @@ export default async function PortalStartPage() {
     );
   }
 
-  return (
-    <StartOrderFlow
-      sites={sites}
-      stores={stores}
-      alias={alias}
-      aliasDiagnostic={aliasDiagnostic}
-    />
-  );
+  return <StartOrderFlow sites={sites} stores={stores} />;
 }

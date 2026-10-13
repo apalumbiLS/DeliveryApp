@@ -445,12 +445,10 @@ export function BuildShareStep({
   retailerId,
   store,
   alias,
-  aliasDiagnostic,
 }: {
   retailerId: RetailerId;
   store: RankedStore;
   alias: string | null;
-  aliasDiagnostic?: string | null;
 }) {
   const [copied, setCopied] = useState(false);
   const retailer = RETAILERS[retailerId];
@@ -491,11 +489,6 @@ export function BuildShareStep({
             We don&apos;t have an order address set up yet. Get in touch and
             we&apos;ll sort it out before you build your cart.
           </p>
-          {aliasDiagnostic ? (
-            <p className="mt-2 font-mono text-[11px] leading-relaxed text-ink-faint">
-              dev: {aliasDiagnostic}
-            </p>
-          ) : null}
         </>
       )}
 
