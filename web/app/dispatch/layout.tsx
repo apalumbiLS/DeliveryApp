@@ -63,6 +63,7 @@ export default async function DispatchLayout(props: LayoutProps<"/dispatch">) {
               label: "Review queue",
               badge: waiting,
             },
+            { href: "/admin", label: "Admin users" },
           ]}
         />
       }

@@ -47,8 +47,8 @@ export default async function PortalStartPage() {
           Cart email intake is not ready yet
         </h1>
         <p className="mt-1 text-[12.5px] leading-relaxed text-ink-muted">
-          Ask the dispatcher to confirm your company&apos;s new Mailgun address
-          before sharing a cart. The old Gmail address does not reach this app.
+          Ask the dispatcher to confirm that cart receiving is ready before
+          sharing. The old Gmail address does not reach this app.
         </p>
       </Card>
     );

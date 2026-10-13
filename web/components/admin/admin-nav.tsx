@@ -5,7 +5,10 @@ import { usePathname } from "next/navigation";
 
 import { cn } from "@/lib/utils";
 
-const LINKS = [{ href: "/admin", label: "Users" }] as const;
+const LINKS = [
+  { href: "/dispatch/review", label: "Review queue" },
+  { href: "/admin", label: "Users" },
+] as const;
 
 export function AdminNav() {
   const pathname = usePathname();

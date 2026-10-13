@@ -4,16 +4,17 @@
 
 ## How to submit a request
 
-1. Build a cart on **Lowe's** for the location where the materials should be purchased. Check that the items appear available for pickup. **Do not purchase or check out at Lowe's.** A shared cart is a request, not a reservation or an order.
-2. Use Lowe's **Share Cart** feature and enter the shared pilot Mailgun address `delivery@mg.getlockstep.io` as the recipient. The dispatcher confirms which company sent it before making an order. The old Gmail inbox and previously seeded `things.dispatch+<company>` address are **not** the advertised pilot route.
-3. Alternatively, if you have a portal login, use the optional start-an-order flow to record your job site and preferred Lowe's store. After the dispatcher confirms this flow is ready, it shows a `delivery+<token>@<receiving-domain>` address specific to this request; share the cart to that exact address. The shared pilot address `delivery@mg.getlockstep.io` requires the dispatcher to select your company manually. Do not use an address the app says is not ready.
-4. A dispatcher checks the items against the original Lowe's email and contacts you for any missing job-site address, store, on-site contact, materials estimate and delivery fee. **Lowe's share-cart email does not include prices, store or job-site information.**
+1. **Recommended:** Sign in to the portal and start a request before building the cart. Choose your job site and preferred Lowe's store; the portal provides a unique `delivery+<token>@<receiving-domain>` address for this request.
+2. Build a cart on **Lowe's** for the selected store. Check availability, then use **Share Cart** to send it to the exact order-specific address the portal gave you. **Do not purchase or check out at Lowe's.** A shared cart is a request, not a reservation or an order.
+3. **Fallback:** If you skip the portal, send the cart to `delivery@mg.getlockstep.io`. The dispatcher must confirm your company, job site, and store manually. Do not use an address the app says is not ready; the old Gmail inbox and previously seeded `things.dispatch+<company>` address are not the advertised pilot route.
+4. A dispatcher checks the items against the original Lowe's email and contacts you for missing on-site contact, materials estimate and delivery fee. **Lowe's share-cart email does not include prices, store or job-site information.**
 
 ```mermaid
 flowchart LR
-    A[Build Lowe's cart] --> B[Share to delivery@ or delivery+token address]
-    B --> C[App records and parses mail]
-    C --> D[Dispatcher reviews items and collects missing details]
+    A[Choose site and store in portal] --> B[Get order-specific address]
+    B --> C[Build and share Lowe's cart]
+    X[Skip portal: use shared address] --> C
+    C --> D[Dispatcher reviews items and missing details]
     D --> E[Human follow-up; no automatic checkout email]
 ```
 

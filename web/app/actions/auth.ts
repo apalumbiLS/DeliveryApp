@@ -44,8 +44,8 @@ export async function signIn(
     return { error: "That email and password don't match." };
   }
 
-  // Route by role rather than always to the portal: a dispatcher belongs in
-  // the admin console. `next` wins when the visitor was deep-linked here.
+  // Route by role rather than always to the portal: a dispatcher lands in
+  // the review queue. `next` wins when the visitor was deep-linked here.
   const { data: profile } = await supabase
     .from("profiles")
     .select("role, active")
