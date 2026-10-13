@@ -1,210 +1,88 @@
-# 05 — Email Intake
+# 05 — Lowe's email intake
 
-How a customer's shared cart becomes a row in `inbound_emails`.
+A customer builds a Lowe's cart and uses Lowe's **Share Cart** to send it to their company's address on the prototype Mailgun receiving domain. The application parses it into dispatcher work. A portal visit is **optional**.
 
-> **Status:** Implemented — `app/api/webhooks/mailgun/inbound/route.ts` and `lib/intake/`. No real mail flows yet: the domain prerequisite below is still outstanding, so the route is exercised by posting fixtures at it.
-
----
+> **Status:** The parser and signed webhook exist, but the temporary domain's receiving MX and a real Mailgun → Vercel delivery have **not been verified**. Do not represent the address as live until the operator has confirmed the receiving path and set `ORDER_INTAKE_READY=true`. One-use portal addresses, atomic persistence and inbound exception handling are later review phases; this document distinguishes today's code from that target.
 
 ## The critical detail: the sender is the retailer, not the customer
 
-This is the single most important fact about intake, and it is easy to get backwards.
+The captured Lowe's message has a generic subject and `From: Lowe’s Home Improvement <lowes@e.lowes.com>`. Its body contains `Sent from the cart of <requester email>`, three product names, Lowe's item/model numbers and quantities. It has **no prices, job-site address, store or aisle**. The company's identity comes from the SMTP **envelope recipient** in Mailgun's `recipient` field, not the retailer's sender, a displayed `To:` header or an inferred address. The requester email in the body is informational, not proof of ownership.
 
-When a customer uses Home Depot's "share cart" feature, **Home Depot sends the email**. The customer is not the sender — they are the subject line:
+## Addressing and prerequisites
 
-```
-From:    The Home Depot <HomeDepot@order.homedepot.com>
-To:      joe.haas@locksmithconsulting.com, notyetsoon@yahoo.com
-Subject: Share Cart Invitation From Anthony Palumbi
-```
+- **Email-only entry:** the pilot company retains its existing `companies.order_alias` local part (`things.dispatch+acme-construction`). Its customer-facing address is `<company.order_alias>@<ORDER_ALIAS_DOMAIN>`. It is a **Mailgun-domain** address, not the old `@gmail.com` inbox. You may give it to the customer without requiring portal login.
+- **Optional portal (next phase):** generate `cart-<opaque random token>@<ORDER_ALIAS_DOMAIN>` for each `order_intents` row. The first eligible distinct email claims that intent's store and delivery site. A later *different* email to the same token is a new company order **without** the old site/store. Sending to the stable company alias never auto-matches the most recent intent.
+- **The prototype domain is already verified for ownership, but its receiving MX is not yet confirmed.** In the user's Mailgun account, configure MX using the exact records provided by Mailgun for that domain, confirm inbound delivery, then the route and Vercel destination. `ORDER_INTAKE_READY=true` is an **operator confirmation**, not an automated DNS probe. `MAILGUN_SIGNING_KEY` is the HTTP webhook signing key, never the Mailgun API key.
+- **Stable HTTPS URL:** Mailgun must reach the Vercel deployment from the public internet. Check Vercel deployment protection: a protected preview can reject provider POSTs before the Next.js route runs. Use a stable, reachable endpoint; if a preview bypass is required, manage its secret out of the repo.
 
-Three consequences:
-
-1. **We cannot attribute an order by sender address.** `order.homedepot.com` sends every customer's cart. Sender-matching would attribute every order to the same company.
-2. **Attribution must come from the recipient.** This is exactly why the per-company alias decision is correct and not merely a convenience — it is the only reliable discriminator available. See [ADR-0008](../adr/0008-dispatcher-assigns-store.md) and [03-data-model](03-data-model.md#companies).
-3. **The requester's name is in the subject**, in the form `Share Cart Invitation From <name>`.
-
-A customer may also add our alias alongside other recipients, so our address can be one of several in the `To` header. The Mailgun webhook's `recipient` field reports the SMTP envelope recipient that matched our route, which is the value we key on — not the `To` header.
-
----
-
-## Prerequisites
-
-| # | Prerequisite | Blocks |
-|---|---|---|
-| 1 | Domain purchased | Everything below |
-| 2 | Mailgun account | Everything below |
-| 3 | Dedicated inbound subdomain (e.g. `orders.<domain>`) with MX records pointed at Mailgun | Inbound |
-| 4 | SPF/DKIM records for outbound sending | Outbound deliverability |
-| 5 | A **separate** subdomain for staging (e.g. `orders.staging.<domain>`) | Safe non-production testing |
-
-Prerequisite 5 is not optional. Mailgun routes are scoped per domain, so sharing one domain across environments would deliver every real customer cart email into both production and staging.
-
----
-
-## Alias scheme
-
-```
-<company.order_alias>@orders.<domain>
-```
-
-Example: a company with `order_alias = 'fixhome'` receives carts at `fixhome@orders.quickconstruction.example`.
-
-The local part is stored on `companies.order_alias` as `citext` and is unique. The domain is configuration, not data — it lives in an environment variable so staging and production can differ without a migration.
-
-The dispatcher creates the alias when onboarding a company. There is no self-service signup in the MVP.
-
----
+See [11-deployment-and-environments](11-deployment-and-environments.md#temporary-mailgun-receiving-setup) for the user-run setup and later account handoff.
 
 ## Mailgun route configuration
 
-Two actions on one route:
+Use **one** route scoped to the exact receiving domain. Its required action is:
 
 ```text
-Priority: 0
-Expression: match_recipient("(?P<alias>[^@]+)@orders\.example\.com")
-Actions:
-  store(notify="https://<app>/api/webhooks/mailgun/inbound")
-  forward("https://<app>/api/webhooks/mailgun/inbound")
+Expression: match_recipient("^.+@<receiving-domain-escaped-for-regex>$")
+Action: forward("https://<stable-vercel-host>/api/webhooks/mailgun/inbound")
+Optional additional action: store()
 ```
 
-- **`store()`** retains the original MIME for 3 days, retrievable via the Messages API. This is the recovery path if our webhook is down or the payload is truncated.
-- **`forward()`** POSTs the parsed message to us.
-- **The named capture `alias`** is available for use in action URLs, but we re-derive it from the `recipient` field rather than trusting the URL, so a misconfigured route cannot silently misattribute orders.
+In the real route, replace the placeholder with the actual domain and escape dots for Mailgun's regular expression. `forward()` delivers the **parsed email** (typically form-encoded; multipart if attachments are present). Optional `store()` retains a recoverable copy at Mailgun for its plan-dependent limited retention. **Never configure `store(notify=".../api/webhooks/mailgun/inbound")`**: it sends a *different notification payload* to the same route and can be misinterpreted as a cart. A future storage-notification handler, if needed, gets its own endpoint. Avoid a callback URL ending in `json` or `mime` unless the route is deliberately updated to handle that format and its distinct signature rules.
 
-A low-priority `catch_all()` route handles mail to unknown local parts — see [Unknown aliases](#unknown-aliases).
+Do not point a second Mailgun route at the same recipient and handler without confirming its behavior. One signed forward per incoming recipient is the acceptance contract.
 
----
+## Webhook contract and current gaps
 
-## Webhook contract
+| Concern | Current code | Required before declaring live |
+|---|---|---|
+| Endpoint | `POST /api/webhooks/mailgun/inbound`, `web/app/api/webhooks/mailgun/inbound/route.ts` | Capture and test a **real** Mailgun form payload, not just a Gmail-exported `.eml` |
+| Signature | HMAC-SHA256 of timestamp + token using `MAILGUN_SIGNING_KEY`; 406 on mismatch | Verify current account key and retry/timestamp behavior. Never log the key, token or raw body |
+| Recipient | `lib/intake/process-inbound-email.ts` currently looks up the local part in `companies.order_alias` | Validate the recipient **domain** and use the current/legacy account's correct key; implement opaque intent tokens |
+| Idempotency | Uses the email's `Message-ID` (legacy column name `mailgun_message_id`) or a content hash | Include recipient so the same Message-ID addressed to two companies does not suppress one of them; atomically handle retries |
+| Retailer authenticity | Checks only for a `DKIM-Signature d=` header | Presence is **forgeable**, not verified authentication. Quarantine uncertain messages visibly; validate provider evidence with a real signed capture |
+| Persistence | Records inbound email, attempt, order, items, intent and state in separate calls | Check every write and finalize related records transactionally so retries cannot strand half-orders |
+| Customer email | No actual sending or checkout destination exists | **No automatic customer email or driver dispatch** in this intake milestone |
 
-| Property         | Value                                                                                                                   |
-|----------------|-----------------------------------------------------------------------------------------------------------------------|
-| Endpoint         | `POST /api/webhooks/mailgun/inbound`                                                                                    |
-| Content type     | `application/x-www-form-urlencoded`, or `multipart/form-data` when attachments are present                              |
-| Authentication   | Mailgun HMAC signature — see below                                                                                      |
-| Success response | `200` with the outcome as JSON — one of `parsed`, `needs_review`, `duplicate`, `unattributed`, `unsupported_retailer`, `not_authentic` |
-| Failure response | `406` when the signature does not verify; `500` when our own work failed, so Mailgun retries a delivery we never recorded |
-| Target latency   | Under Mailgun's timeout. The deterministic path is sub-second; the LLM fallback (when enabled) runs under a time budget |
+The current route accepts `formData` and calls the processor inline. Do not assume tests using `fake-supabase.ts` prove real Postgres/RLS behavior. For permanent invalid requests (e.g. bad signature) return 406 without creating an order; for transient persistence failures return a retryable 5xx; return 200 only after a durable decision. Mailgun's `store(notify=…)` is not a fallback for an unverified/blocked `forward()` endpoint.
 
-### Payload fields we consume
+## Signature verification
 
-| Field | Use |
-|---|---|
-| `recipient` | **Authoritative** — derive `recipient_alias` from this |
-| `sender` | Retailer envelope sender |
-| `from` | Retailer display address |
-| `subject` | Requester name extraction |
-| `body-html` | **The parser's input** |
-| `body-plain` | Not used for parsing — Mailgun synthesizes it when only HTML exists, and the synthesis is lossy |
-| `stripped-html` | Quoted-text-stripped variant; a useful cross-check when a customer forwards a cart inside a reply |
-| `message-headers` | JSON header list; used for `Message-ID` and DKIM results |
-| `timestamp`, `token`, `signature` | Request authentication |
-| `attachment-count`, `attachment-N` | Counted and logged; cart emails have none |
+A Mailgun signature authenticates **Mailgun's POST**, not the author of the retailer email. The form payload's HMAC uses `timestamp + token`, not the HTML body. Treat a malformed or expired signature as invalid, but test the timestamp window against actual retries before relying on it for recovery. A token cache must not reject Mailgun's legitimate retry of a delivery that failed to commit.
 
-### Signature verification
+For the retailer, a displayed From address or `DKIM-Signature d=` is **not sufficient**. Mailgun can add `X-Mailgun-Dkim-Check-Result` when spam filtering is configured to *mark with MIME headers*, but `Pass` alone does not prove which domain signed and inbound headers may contain sender-supplied copies. Until a real payload and spoofed-header test establish reliable, aligned provider evidence, parse as a **read-only provisional preview**, then require an authorized dispatcher to approve it before creating an operational order.
 
-Mailgun signs every `forward()` request with HMAC-SHA256 over `timestamp` + `token` using the account's signing key. Reject unless the signature matches (constant-time comparison) **and** the timestamp is within five minutes of now.
-
-Failure returns `406` and writes nothing.
-
-**There is no single-use token store**, and that is deliberate rather than an oversight. Mailgun retries a delivery when the endpoint returns a non-2xx, and [ADR-0009](../adr/0009-inline-intake-and-cron-sweeps.md) makes those retries the recovery path for an email we failed to record. If a retry reuses its timestamp and token — which Mailgun documents neither way — a single-use check would reject exactly the retries the design depends on, and a real cart would be lost. Losing an order is worse than the replay window.
-
-That leaves a residual hole worth naming: the signature covers the timestamp and token, **not the payload**, so a captured request could in principle be replayed with a different body inside the window. The window bounds it. Add the token store once Mailgun's retry behaviour is confirmed against a real account.
-
----
-
-## Processing flow
+## Processing flow (target)
 
 ```mermaid
 sequenceDiagram
-    participant HD as Home Depot
-    participant MG as Mailgun
-    participant WH as /api/webhooks/mailgun/inbound
-    participant DB as Postgres
-    participant P as Parser
-
-    HD->>MG: share-cart email to fixhome@orders.example.com
-    MG->>MG: DKIM verify, parse MIME
-    MG->>WH: POST (HMAC-signed, form-encoded)
-    WH->>WH: verify signature + timestamp + token
-    WH->>DB: insert inbound_emails (ON CONFLICT DO NOTHING)
-    alt already processed
-        WH-->>MG: 200 (no-op)
-    else new, or previous attempt unfinished
-        WH->>P: parse body-html (inline)
-        P->>DB: write parse_attempts
-        alt valid
-            P->>DB: create order -> received (unique per inbound_email_id)
-        else invalid
-            P->>DB: order -> needs_review + dispatcher alert
-        end
-        WH-->>MG: 200
-    end
+    participant Customer
+    participant Lowe as Lowe's
+    participant Mailgun
+    participant App as Signed Vercel webhook
+    participant DB as Supabase
+    participant Dispatcher
+    Customer->>Lowe: Share Cart to company's Mailgun address
+    Lowe->>Mailgun: HTML email
+    Mailgun->>App: one signed forward() with envelope recipient + body
+    App->>DB: record/dedupe inbound message
+    App->>DB: resolve company via stable alias or one-use intent alias
+    App->>DB: parse and persist trusted order atomically OR provisional exception
+    App-->>Mailgun: 200 only after durable decision
+    DB-->>Dispatcher: ordinary order or visible exception in one worklist
+    Dispatcher->>DB: verify and complete missing site/store/materials
+    Note over App,Dispatcher: No customer email or automatic dispatch on receipt
 ```
 
-Parsing runs **inline**, before the `200` is returned. The deterministic path is sub-second, so this costs nothing on the common path; a failure is recorded and lands in the review queue rather than being retried blindly.
+Lowe's does not state a materials price, so **zero in the current schema means unknown, not a free order**. The dispatcher enters the materials estimate as part of review.
 
-### The order the checks run in
+## Idempotency and intent matching
 
-Each is cheaper than the one after it, and the order is deliberate:
+Mailgun retries and can redeliver. One `Message-ID` + **normalized envelope recipient** identifies a delivered message; absent Message-ID, use a documented stable recipient + content fingerprint. A retry of the same message must not create a second order. Two different messages to one consumed intent token must create distinct orders, with only the first eligible message carrying the intent's site/store. Never fall back to the company's "latest open" intent for mail sent directly to its stable alias. All order/items/intent-status/event writes should commit together, not claim success after partial Supabase writes.
 
-1. **Record the raw email.** Always, before interpreting anything — that is what makes a parser fix replayable over history.
-2. **Attribute it to a company**, from the recipient alias. The retailer sends every customer's cart from the same address, so the sender identifies nobody.
-3. **Select a parser** by sender domain. No parser means **no order at all**, not even a `needs_review` one — the retailer value would be a guess. The email is still recorded.
-4. **Require the retailer to have signed it** (see [Sender authenticity](#sender-authenticity)).
-5. **Parse**, record the attempt, and create the order — `received` when it parsed, `needs_review` when it did not. The customer's cart is never silently dropped.
+## Sender authenticity and unknown aliases
 
-An **order intent** is claimed last, and only if it is still open, so two carts arriving together cannot both take the same store and address.
+An unknown company alias/token, unsupported sender, unverified retailer, or failed parse is a **visible dispatcher exception**, not a silently ignored message or an automatically dispatchable order. The current implementation stores some such messages with no order, but the existing dispatcher query only lists `orders` in `received`/`needs_review`; the unified exception view is pending. A dispatcher must manually verify a questionable message before accepting/attributing it. Never auto-create companies from inbound mail.
 
----
+## Out of scope for this milestone
 
-## Idempotency
-
-Mailgun retries on non-2xx and can deliver duplicates. `inbound_emails.mailgun_message_id` is unique, and the insert relies on it.
-
-**What that column actually holds:** the email's own `Message-ID` header. Mailgun's `forward()` payload carries **no message id of its own** — the documented fields are signature, timestamp, token, subject, sender, from, recipient, message-headers, and the bodies. The `Message-ID` is stable across a redelivery and unique per email, which is precisely what an idempotency key needs. A message without one falls back to a SHA-256 of its recipient, subject, and body, which is also stable across a redelivery.
-
-The column name is a legacy of the assumption that Mailgun would supply one. It is the idempotency key, not a Mailgun identifier.
-
-A retry is treated as **recovery, not a no-op**:
-
-- If the existing row is already `parsed` or `needs_review`, the delivery is a duplicate — return `200` and do nothing.
-- If the existing row is still `pending` or `failed` — a previous attempt did not finish — **re-process it**. A retry of a timed-out delivery is exactly the recovery path we want.
-
-Order creation is idempotent on top of this: `orders.inbound_email_id` is unique, so two attempts on the same email cannot produce two orders. The second insert fails the constraint and returns `200`.
-
----
-
-## Sender authenticity
-
-Anyone can send mail to our alias, and a `From` header is free to forge. Two checks, in this order:
-
-1. **Retailer identification by sender domain**, using a dot boundary — `host === domain || host.endsWith('.' + domain)`. A bare `endsWith("lowes.com")` would also accept `notlowes.com`, which is how a spoofed sender gets a parser applied to it. An unrecognised sender never selects a parser.
-2. **A DKIM signature under that same domain.** The message must carry a `DKIM-Signature` whose `d=` is the parser's declared domain or a subdomain of it.
-
-The second check is a **weak signal, deliberately and not by accident**: a `DKIM-Signature` header can itself be forged, so its presence is not proof. Verifying it properly means fetching the selector's public key from DNS and re-canonicalising the message, which is out of scope for the MVP. What it does establish is that the message was prepared by something that knows the retailer's DKIM conventions, which a casual forgery will not.
-
-A message failing either check is stored with `processing_status = 'ignored'` and never becomes an order. The remaining defence is that a company's order alias is not public: an attacker has to know one to try at all.
-
-A message that fails DKIM is stored with `processing_status = 'ignored'` for visibility but never becomes an order. This is the anti-spoofing boundary: without it, a crafted email could fabricate an order and a driver would be dispatched to buy materials with no legitimate cart behind it.
-
----
-
-## Unknown aliases
-
-If `recipient_alias` matches no company:
-
-- The email is stored with `processing_status = 'needs_review'`.
-- `order_id` stays null.
-- It appears in the dispatcher console as an **unattributed inbound email**, where the dispatcher can either attach it to an existing company (creating the order) or dismiss it.
-
-This is the safety net for typos, forwarded carts, and prospects who email us before being onboarded. It is deliberately not an auto-create: silently creating companies from unverified inbound mail is how a spam flood becomes a customer database.
-
----
-
-## What is out of scope
-
-- Attachment parsing. Cart emails are HTML-only; `attachment-count` is logged as a signal that the retailer changed their template.
-- Inbound customer replies. Replies go to the portal, not to email. A reply to our alias lands in the unknown-alias queue rather than being interpreted.
-- Spam filtering. Mailgun's edge filtering plus DKIM verification is the MVP posture.
+Home Depot and Ace parsers, scraping retailer sites, AI fallback, automatic customer receipt/checkout email, driver broadcasting and payments. The optional portal remains supported; it is no longer the only way to request a delivery.

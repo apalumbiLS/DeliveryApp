@@ -11,7 +11,7 @@ Establish the full system architecture, data model, and phased build plan for a 
 
 Build the systems needed for a construction-site delivery MVP: a Next.js app (three role-guarded UIs) on Supabase, with a Mailgun-driven email-cart intake that parses **Lowe's** share-cart emails into structured orders, a dispatcher console that drives the order through a guarded state machine, a driver job board with first-accept-wins dispatch, and Stripe Payment Links for collection.
 
-This document is the entry point and roadmap. Phases 1–7 below are the implementation sequence; the numbered documents in this directory expand each subsystem.
+This document describes the longer-term product roadmap, **not the set of features already live**. The current prototype milestone is narrower: a customer shares a Lowe's cart to a company-specific Mailgun address without needing the portal; the app parses it into dispatcher review, where a person supplies missing site/store/price details. The portal's pre-cart flow is optional. Customer checkout invitations, outbound mail, automated dispatch and payments are **not enabled**. [05-email-intake](05-email-intake.md) documents the current receiving setup and outstanding hardening.
 
 ---
 
@@ -47,16 +47,16 @@ These five findings were derived by inspecting the real Home Depot share-cart em
 | Persistence     | Supabase (Postgres + Auth + Storage + RLS)                                                |
 | Front end       | Next.js App Router, **one app, 3 route groups**: `/dispatch`, `/driver`, `/portal`        |
 | Hosting         | Vercel                                                                                    |
-| Email in + out  | **Mailgun** inbound routes → webhook; Mailgun for outbound                                |
+| Email in + out  | **Mailgun** inbound webhook; outbound customer email deferred from current milestone      |
 | Retailers       | **Lowe's only.** Home Depot and Ace are deferred — no parser and no seeded stores         |
 | SMS             | Twilio                                                                                    |
 | Payments        | Stripe Payment Links + webhook                                                            |
 | Background jobs | **Vercel Cron sweeps** over a notifications outbox + broadcast expiry. No workflow engine |
-| Intake paths    | Per-company email alias **and** post-intake portal checkout                               |
-| Order identity  | **Per-company alias only**; unmatched alias → review queue                                |
+| Intake paths    | Stable company Mailgun address is enough; optional pre-cart portal flow; no live checkout |
+| Order identity  | Stable plus-tag local part per company; one-use intent addresses planned for optional portal |
 | Company model   | Company = org, **one portal login** per company                                           |
 | Auth            | Email-as-username + password (Supabase Auth)                                              |
-| Store capture   | **Customer captures it** in the portal before building the cart (ADR-0010); dispatcher confirms |
+| Store capture   | Customer supplies it in optional portal flow; dispatcher collects it for direct-email orders |
 | Parsing         | Deterministic parser → schema validation → dispatcher review queue. **LLM fallback deferred** |
 | Item metadata   | Email fields only. No enrichment API, no scraping.                                        |
 | Quote           | **Manual fee entry** by dispatcher                                                        |
@@ -314,11 +314,11 @@ docs/
 
 ### Phase 1 — Foundation
 
-Domain purchase + DNS/MX for Mailgun · Supabase project (`us-east-1`) · Vercel project · repo scaffold (Next.js, TS, Tailwind, shadcn/ui) · all migrations + RLS + enums · seed `retailer_stores` for Upstate SC · auth + role claims + three guarded route groups · CI (lint, typecheck, test).
+Next.js/Bun and Supabase schema are scaffolded; the pilot has North Carolina Lowe's store data. Your temporary Mailgun domain is verified for ownership but receiving MX and the Vercel callback still require an operator-run live test. Historical phase names below describe the broader roadmap, not the order in which to enable customer checkout.
 
 ### Phase 2 — Email intake + parsing _(highest risk — deliberately early)_
 
-Mailgun route `match_recipient("(?P<alias>[^@]+)@orders.<domain>")` → `forward()` + `store(notify=…)` · webhook with HMAC verification, idempotency on message ID, inline parse · `inbound_emails` persistence · `HomeDepotCartParser` with golden-file tests built from the provided `.eml` · validation + LLM fallback + review queue.
+Lowe's parser and a signed Mailgun `forward()` handler exist. Route the verified inbound domain to that **single parsed-email callback**; optional `store()` has no `notify` URL. Receiving-domain validation, one-use intent addresses, atomic persistence and visible exception review are still required before a live customer rollout. Home Depot and AI fallback are deferred.
 
 ### Phase 3 — Dispatcher console
 

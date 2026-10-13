@@ -339,6 +339,7 @@ Declines do not change the order's status. The dispatcher is notified of each on
 | `provider`            | text                                          | `mailgun` or `twilio`          |
 | `provider_message_id` | text                                          |                                |
 | `status`              | notification_status NOT NULL DEFAULT 'queued' |                                |
+| `send_approved`       | boolean NOT NULL DEFAULT false                | Migration `0007`; old and new rows are held until a future sender explicitly opts in |
 | `error`               | text                                          |                                |
 | `attempts`            | int NOT NULL DEFAULT 0                        | Outbox retry counter           |
 | `dedupe_key`          | text UNIQUE                                   | Prevents double-sends on retry |

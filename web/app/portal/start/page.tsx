@@ -3,6 +3,10 @@ import type { Metadata } from "next";
 import { StartOrderFlow } from "@/components/portal/start/start-order-flow";
 import type { FlowSite, FlowStore } from "@/components/portal/start/types";
 import { Card } from "@/components/ui/card";
+import {
+  companyOrderAddress,
+  isInboundAddressReady,
+} from "@/lib/mailgun/config";
 import { isRetailerId } from "@/lib/retailers";
 import { createClient } from "@/lib/supabase/server";
 
@@ -39,6 +43,20 @@ type StoreRow = {
 };
 
 export default async function PortalStartPage() {
+  if (!isInboundAddressReady()) {
+    return (
+      <Card className="p-6">
+        <h1 className="text-[15px] font-semibold text-ink">
+          Cart email intake is not ready yet
+        </h1>
+        <p className="mt-1 text-[12.5px] leading-relaxed text-ink-muted">
+          Ask the dispatcher to confirm your company&apos;s new Mailgun address
+          before sharing a cart. The old Gmail address does not reach this app.
+        </p>
+      </Card>
+    );
+  }
+
   const supabase = await createClient();
 
   const [sitesResult, storesResult, companyResult] = await Promise.all([
@@ -102,10 +120,7 @@ export default async function PortalStartPage() {
   const orderAlias =
     (companyResult.data as unknown as { order_alias: string } | null)
       ?.order_alias ?? null;
-  const aliasDomain = process.env.ORDER_ALIAS_DOMAIN?.trim() || null;
-
-  const alias =
-    orderAlias && aliasDomain ? `${orderAlias}@${aliasDomain}` : null;
+  const alias = companyOrderAddress(orderAlias);
 
   // The customer-facing message stays vague on purpose. This names the missing
   // half for whoever is setting the environment up, and is never rendered in
@@ -115,7 +130,9 @@ export default async function PortalStartPage() {
       ? null
       : [
           orderAlias ? null : "companies.order_alias is empty",
-          aliasDomain ? null : "ORDER_ALIAS_DOMAIN is not set",
+          isInboundAddressReady()
+            ? null
+            : "Mailgun intake is not confirmed ready (check ORDER_INTAKE_READY, domain, and signing key)",
           companyResult.error
             ? `companies query failed: ${companyResult.error.message}`
             : null,

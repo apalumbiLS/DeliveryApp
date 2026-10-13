@@ -23,3 +23,45 @@ export function isMailgunConfigured(): boolean {
     process.env.MAILGUN_SIGNING_KEY && process.env.ORDER_ALIAS_DOMAIN,
   );
 }
+
+type InboundAddressConfig = {
+  domain?: string;
+  signingKey?: string;
+  ready?: string;
+};
+
+function inboundAddressConfig(): InboundAddressConfig {
+  return {
+    domain: process.env.ORDER_ALIAS_DOMAIN,
+    signingKey: process.env.MAILGUN_SIGNING_KEY,
+    ready: process.env.ORDER_INTAKE_READY,
+  };
+}
+
+export function isInboundAddressReady(
+  config: InboundAddressConfig = inboundAddressConfig(),
+): boolean {
+  const domain = config.domain?.trim().toLowerCase();
+  return (
+    config.ready === "true" &&
+    Boolean(config.signingKey?.trim()) &&
+    Boolean(domain && /^[a-z0-9.-]+\.[a-z]{2,}$/.test(domain)) &&
+    domain !== "gmail.com" &&
+    domain !== "googlemail.com"
+  );
+}
+
+export function companyOrderAddress(
+  orderAlias: string | null,
+  config: InboundAddressConfig = inboundAddressConfig(),
+): string | null {
+  const alias = orderAlias?.trim().toLowerCase();
+  const domain = config.domain?.trim().toLowerCase();
+  return alias &&
+    alias.length <= 64 &&
+    /^[a-z0-9][a-z0-9.+_-]*$/.test(alias) &&
+    domain &&
+    isInboundAddressReady(config)
+    ? `${alias}@${domain}`
+    : null;
+}

@@ -1,134 +1,33 @@
-# Customer Guide
+# Customer guide — Lowe's cart intake prototype
 
-Getting materials to your job site without leaving it.
+> **Status:** This describes the cart-request stage only. Dispatcher review, driver delivery, checkout, automatic updates and payment are not end-to-end customer features yet. Do not use this as a same-day delivery promise. The previous low-tech runbook is historical.
 
-> **Status:** Describes the target system. Not yet implemented — see [00-overview](../architecture/00-overview.md).
+## How to submit a request
 
----
-
-## How it works
-
-You build a cart on Home Depot's or Lowe's website exactly as you do today. You share it with us instead of buying it. We buy it, and a driver brings it to your site.
-
-**You never pay the store.** You pay us, once, after delivery.
+1. Build a cart on **Lowe's** for the location where the materials should be purchased. Check that the items appear available for pickup. **Do not purchase or check out at Lowe's.** A shared cart is a request, not a reservation or an order.
+2. Use Lowe's **Share Cart** feature and enter **the Mailgun address assigned to your construction company** as the recipient. The dispatcher supplies that address after receiving-domain MX and the application webhook have been verified. It may retain a `things.dispatch+<company>`-style local part from the pilot, but it must be on the **new receiving domain, not `@gmail.com`**. Sharing to the former Gmail inbox does not create an order in this app.
+3. Alternatively, if you have a portal login, you can use the optional start-an-order flow first to record your job site and preferred Lowe's store. Until the one-use intent-address phase is released and tested, **use your company's assigned stable Mailgun address** for the cart. If you skip the portal, the email still enters dispatcher review.
+4. A dispatcher checks the items against the original Lowe's email and contacts you for any missing job-site address, store, on-site contact, materials estimate and delivery fee. **Lowe's share-cart email does not include prices, store or job-site information.**
 
 ```mermaid
 flowchart LR
-    A[Build a cart<br/>at the store] --> B[Share it<br/>with us]
-    B --> C[We price it<br/>you approve]
-    C --> D[We buy<br/>and deliver]
-    D --> E[You pay]
+    A[Build Lowe's cart] --> B[Share to company Mailgun address]
+    B --> C[App records and parses mail]
+    C --> D[Dispatcher reviews items and collects missing details]
+    D --> E[Human follow-up; no automatic checkout email]
 ```
 
----
+## Before you share
 
-## 1. Build your cart
+- Use the **exact company address** supplied by the dispatcher; the message comes from Lowe's, so the address it was sent *to* determines which company owns the request.
+- If you have several active job sites, provide the specific delivery address and preferred Lowe's location directly to the dispatcher. Do not assume the application inferred either from the cart.
+- Do not treat a successful share or a status in the portal as confirmation that a driver has accepted a job, that materials have been purchased, or that any email from the application was sent.
+- If you need to correct the cart, tell the dispatcher which email is the replacement. A genuinely new share-cart message may become a separate request; the old one is not automatically overwritten.
 
-On **homedepot.com** or **lowes.com**:
+## What is not live yet
 
-1. Set your store location — the store you'd actually go to.
-2. Add the items you need.
-3. Check that everything is available for **immediate pickup** at that store.
-
-> **Do not check out. Do not pay.** The cart is your request to us. You will never be charged by the store.
-
----
-
-## 2. Share the cart with us
-
-Use the store's **Share Cart** feature and send it to the address we gave you.
-
-Your company has its own address, something like:
-
-```
-yourcompany@orders.example.com
-```
-
-Use the share option and enter that address as the recipient. Home Depot will send us the cart directly.
-
-> **Use your company's address, not a personal one.** That's how we know the cart is yours. If you send it from somewhere else, it lands in a queue for a dispatcher to sort out and slows everything down.
-
----
-
-## 3. Review and approve
-
-You'll get an email confirming we received your cart, with a link to your order.
-
-In the portal you will:
-
-1. **Check the items.** Confirm we read your cart correctly — descriptions, quantities, prices.
-2. **Enter the delivery address** — where on site the materials should go.
-3. **Add drop-off instructions** if they're useful. For example: "Gate code 4412, go to the rear entrance, ask for Dave."
-4. **Add an on-site contact** and a phone number if you want text updates.
-5. **Review the price** — materials, plus a sizing fee and a delivery fee, itemised.
-6. **Approve and pay.**
-
-**Nothing is ordered until you approve the price.** If anything looks wrong, don't approve it — call us and we'll fix it.
-
----
-
-## 4. Track it
-
-Your order page shows where things stand:
-
-| Status | What's happening |
-|---|---|
-| Received | We have your cart |
-| Awaiting your approval | Waiting on you |
-| Confirmed | You approved it |
-| Finding a driver | We're lining someone up |
-| Driver assigned | Someone is on it |
-| At store | Your materials are being bought |
-| Purchased | Bought and loaded |
-| On the way | Heading to your site |
-| Delivered | It's there |
-| Payment requested | Your payment link has been sent |
-| Paid | Complete |
-
-You'll also get an email when the driver is on the way.
-
----
-
-## 5. Receive and pay
-
-The driver photographs the delivery, and you'll get an email with that photo, your receipt, and a payment link.
-
-Check that everything arrived, then pay through the link.
-
-> **Check the delivery before you pay.** Count the items. If something is missing or wrong, contact us before paying — it's much easier to fix beforehand.
-
----
-
-## Things worth knowing
-
-**The cart is a request, not a purchase.** Nothing is reserved at the store. If an item sells out between you sharing the cart and the driver arriving, it may not be available.
-
-**We'll call you if something is out of stock.** Item substitution isn't handled automatically yet — a person will contact you.
-
-**Choose the right store.** We can't tell from your shared cart which store you built it at, so a dispatcher selects it. If you built your cart at the North Frisco location, say so in your delivery instructions — it's a quick way to prevent a wasted trip.
-
-**Timing.** Orders approved by early afternoon are typically delivered the same day.
-
-**One login per company.** Your company has a single portal account.
-
----
-
-## Frequently asked
-
-**Can I add items after sharing the cart?**
-Not to an existing order. Contact us and we'll sort it out — or share a new cart.
-
-**What if I need it today?**
-Approve the price as soon as you get the email. Everything after that is automatic.
-
-**Who do I contact?**
-Reply to any of our emails, or call the number in your order confirmation.
-
-**Can I cancel?**
-Call us. Cancellation isn't self-service yet.
-
----
+Automatic customer acknowledgement, checkout/price approval links, in-app substitutions, driver status alerts, payment links and Home Depot/Ace cart parsing remain future work. Existing `awaiting_customer` orders from the earlier prototype **did not cause an email to be sent**. Contact the dispatcher for status; do not wait for an automated message that has not been built.
 
 ## Related
 
-- [Dispatcher guide](dispatcher-guide.md) · [Driver guide](driver-guide.md)
+- [Dispatcher guide](dispatcher-guide.md) · [Email intake architecture](../architecture/05-email-intake.md)

@@ -2,8 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Chevron } from "@/components/ui/icons";
 import { StatusDot } from "@/components/ui/status-dot";
+import { companyOrderAddress } from "@/lib/mailgun/config";
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 
@@ -15,31 +17,55 @@ export default async function PortalHomePage() {
   const supabase = await createClient();
 
   // RLS scopes this to the signed-in customer's company.
-  const { data } = await supabase
-    .from("orders")
-    .select("order_number")
-    .eq("status", "awaiting_customer")
-    .order("created_at", { ascending: false })
-    .limit(1);
+  const [ordersResult, companyResult] = await Promise.all([
+    supabase
+      .from("orders")
+      .select("order_number")
+      .eq("status", "awaiting_customer")
+      .order("created_at", { ascending: false })
+      .limit(1),
+    supabase.from("companies").select("order_alias").maybeSingle(),
+  ]);
 
-  const awaiting = (data ?? [])[0] as { order_number: string } | undefined;
+  const awaiting = ordersResult.data?.[0];
+  const orderAlias =
+    (companyResult.data as { order_alias: string } | null)?.order_alias ?? null;
+  const orderAddress = companyOrderAddress(orderAlias);
 
   return (
     <div className="space-y-3">
-      <Link
-        href="/portal/start"
-        className="block rounded-card border border-hairline bg-card p-5 shadow-card transition-colors hover:bg-card-muted"
-      >
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-[17px] font-semibold tracking-tight text-ink">
-            Start an order
-          </span>
-          <Chevron className="h-4 w-4 text-ink-faint" />
-        </div>
-        <p className="mt-1.5 text-[12.5px] leading-relaxed text-ink-muted">
-          We buy the materials and deliver them to your site.
-        </p>
-      </Link>
+      <Card className="p-5">
+        <h2 className="text-[17px] font-semibold tracking-tight text-ink">
+          Send us your Lowe&apos;s cart
+        </h2>
+        {orderAddress ? (
+          <>
+            <p className="mt-1.5 text-[12.5px] leading-relaxed text-ink-muted">
+              Build a cart at Lowe&apos;s. Use Share Cart to send it to your
+              company&apos;s address. Don&apos;t buy it at Lowe&apos;s.
+            </p>
+            <p className="mt-3 rounded-field border border-hairline bg-card-muted px-3 py-2 font-mono text-[12px] break-all text-ink">
+              {orderAddress}
+            </p>
+            <p className="mt-2 text-[12px] leading-relaxed text-ink-muted">
+              Our dispatcher will review the items and contact you for the job
+              site, store, and price details.
+            </p>
+            <Link
+              href="/portal/start"
+              className="mt-3 inline-flex items-center gap-1 text-[12.5px] font-medium text-accent hover:text-accent-hover"
+            >
+              Add site and store details first (optional)
+              <Chevron className="h-3.5 w-3.5" />
+            </Link>
+          </>
+        ) : (
+          <p className="mt-2 text-[12.5px] leading-relaxed text-warning-ink">
+            Cart intake is not ready. Contact the dispatcher before sharing. The
+            old Gmail address does not reach this app.
+          </p>
+        )}
+      </Card>
 
       {awaiting ? (
         <Link
@@ -48,7 +74,8 @@ export default async function PortalHomePage() {
         >
           <StatusDot tone="warning" />
           <span className="flex-1 text-[13px] font-medium text-accent-soft-ink">
-            Order {awaiting.order_number} is waiting for your approval
+            Order {awaiting.order_number} needs dispatcher follow-up; no
+            checkout email has been sent
           </span>
           <Chevron className="h-4 w-4 text-accent-soft-ink/70" />
         </Link>

@@ -20,8 +20,13 @@ import { Td, Th } from "@/components/console/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AlertIcon } from "@/components/ui/icons";
-import { updateOrderQuote, updateOrderStore } from "@/lib/dispatch/actions";
+import {
+  queueCheckoutInvite,
+  updateOrderQuote,
+  updateOrderStore,
+} from "@/lib/dispatch/actions";
 import { blockingGate, type Gate } from "@/lib/dispatch/gates";
+import { CHECKOUT_INVITES_ENABLED } from "@/lib/dispatch/invite";
 import {
   listQueue,
   loadOrderDetail,
@@ -408,28 +413,65 @@ function GateChip({ gate }: { gate: Gate }) {
   );
 }
 
-function GateBar({ gates }: { gates: Gate[] }) {
-  const blocker = blockingGate(gates);
+function inviteNote(detail: OrderDetail, blocker: Gate | null): string {
+  if (detail.inviteQueued) {
+    return "An earlier prototype queued an invite, but no email was sent. Dispatcher follow-up is required.";
+  }
+
+  if (!CHECKOUT_INVITES_ENABLED) {
+    return "Customer invitations are paused until checkout and outbound delivery are available. This order remains for dispatcher review.";
+  }
+
+  if (!detail.inviteRecipient) {
+    return "No email address for this customer, so there is nobody to invite.";
+  }
+
+  if (blocker) {
+    return `The invite unlocks when ${blocker.label.toLowerCase()} is resolved.`;
+  }
+
+  return "Ready to invite — the customer never sees a price we haven't checked.";
+}
+
+function GateBar({
+  detail,
+  orderId,
+}: {
+  detail: OrderDetail;
+  orderId: string;
+}) {
+  const blocker = blockingGate(detail.gates);
+  const canInvite = CHECKOUT_INVITES_ENABLED && !blocker && Boolean(detail.inviteRecipient);
 
   return (
     <div className="sticky bottom-0 mt-3 border-t border-hairline bg-surface pt-3 pb-3">
       <div className="flex items-end justify-between gap-4">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
-            {gates.map((gate) => (
+            {detail.gates.map((gate) => (
               <GateChip key={gate.key} gate={gate} />
             ))}
           </div>
           <p className="mt-1.5 text-[11px] leading-relaxed text-ink-faint">
-            {blocker
-              ? `The invite unlocks when ${blocker.label.toLowerCase()} is resolved.`
-              : "Ready to invite — the customer never sees a price we haven't checked."}
+            {inviteNote(detail, blocker)}
           </p>
         </div>
-        {/* The button itself lands with the notification outbox. */}
-        <Button size="sm" disabled={Boolean(blocker)} className="shrink-0">
-          Send checkout invite
-        </Button>
+
+        {detail.inviteQueued ? (
+          // The order's status already says `awaiting_customer`, which implies a
+          // message went out. It did not. This says so rather than letting the
+          // state quietly overstate what happened.
+          <span className="shrink-0 rounded-control bg-warning-bg px-3 py-1.5 text-[11.5px] font-medium text-warning-ink">
+            Invite queued — not sent
+          </span>
+        ) : (
+          <form action={queueCheckoutInvite} className="shrink-0">
+            <input type="hidden" name="orderId" value={orderId} />
+            <Button type="submit" size="sm" disabled={!canInvite}>
+              Send checkout invite
+            </Button>
+          </form>
+        )}
       </div>
     </div>
   );
@@ -456,7 +498,7 @@ export default async function ReviewOrderPage(
           <ItemsBand detail={detail} orderId={orderId} />
           <DeliveryBand detail={detail} orderId={orderId} />
         </div>
-        <GateBar gates={detail.gates} />
+        <GateBar detail={detail} orderId={orderId} />
       </div>
     </div>
   );

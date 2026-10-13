@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { Chevron } from "@/components/ui/icons";
 import { List, ListItem } from "@/components/ui/list";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusDot } from "@/components/ui/status-dot";
@@ -78,7 +77,9 @@ export default async function PortalOrdersPage() {
                     {order.order_number}
                   </span>
                   <Badge tone={orderStatusTone[order.status]} bordered>
-                    {orderStatusLabel[order.status]}
+                    {order.status === "awaiting_customer"
+                      ? "Dispatcher follow-up"
+                      : orderStatusLabel[order.status]}
                   </Badge>
                 </div>
                 <div className="mt-0.5 text-[12px] text-ink-faint">
@@ -87,9 +88,10 @@ export default async function PortalOrdersPage() {
                 </div>
               </div>
               <span className="text-[13px] font-semibold text-ink tabular-nums">
-                {money.format(order.total_cents / 100)}
+                {order.total_cents > 0
+                  ? money.format(order.total_cents / 100)
+                  : "Not priced"}
               </span>
-              <Chevron className="h-4 w-4 text-ink-faint/60" />
             </ListItem>
           ))}
         </List>

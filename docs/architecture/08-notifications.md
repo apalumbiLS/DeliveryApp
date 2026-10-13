@@ -2,7 +2,7 @@
 
 Every message the system sends, what triggers it, and how duplicates are prevented.
 
-> **Status:** Planned design. Not yet implemented.
+> **Status:** Customer checkout invitations are paused. Earlier prototype actions may have written `queued` notifications and moved orders to `awaiting_customer`, but **no email was sent** and no checkout page exists. Existing rows are preserved; the dispatcher action now refuses to queue new invites or advance the status. The Lowe's email-to-dispatcher milestone sends no customer or driver notification.
 
 ---
 
@@ -99,6 +99,14 @@ The most important template. It replaces the runbook's manual "reply with your a
 - A single prominent link to the portal checkout
 
 Unlike the old email, **it does not ask the customer to reply with an address.** The address is captured in the portal. This is the direct consequence of the no-parallel-run decision — see [00-overview](00-overview.md#risks-and-considerations).
+
+#### What is built today
+
+The previous prototype action could write a `queued` row and move the order to `awaiting_customer`, although **nothing sent**. The action is now guarded off in server code and the button is disabled. Historical rows and statuses remain for audit; the console labels an existing row **"invite queued — not sent"**. Do not treat an old `awaiting_customer` status as evidence that a customer was contacted.
+
+Migration `0007_hold_unsent_notifications.sql` adds `notifications.send_approved boolean not null default false`. Historical and new rows are held by default. Any *future* sender must filter for explicit `send_approved = true`; adding a sender that simply drains `queued` rows could send old messages unexpectedly. No current worker sends them. Nothing in this intake milestone grants send approval or changes existing rows.
+
+**Recipient.** `orders.requester_email` — the address that shared the cart, and the only one known to be live for this customer. `companies.billing_email` is the fallback. The portal user's own email lives in `auth.users`, which needs the admin API to read, so it is not a candidate here.
 
 ---
 

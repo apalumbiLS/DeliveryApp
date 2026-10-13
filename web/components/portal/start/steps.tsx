@@ -514,8 +514,8 @@ export function BuildShareStep({
       </figure>
 
       <p className="mt-4 text-[11.5px] leading-relaxed text-ink-faint">
-        We&apos;ll email you as soon as we read your cart. We&apos;re buying
-        from {store.store.name}.
+        Our dispatcher will review your cart and confirm the missing details
+        before anyone buys from {store.store.name}.
       </p>
     </div>
   );

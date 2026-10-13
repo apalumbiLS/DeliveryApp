@@ -86,6 +86,14 @@ export type OrderDetail = {
     address: string | null;
     instructions: string | null;
   };
+  /**
+   * Who the checkout invite would go to, or null when we have no address for
+   * them — in which case the console says so rather than offering a button that
+   * cannot work.
+   */
+  inviteRecipient: string | null;
+  /** True once an invite is sitting in the outbox. Nothing sends it yet. */
+  inviteQueued: boolean;
   store: StoreOption | null;
   alternatives: StoreOption[];
   gates: Gate[];
@@ -108,6 +116,7 @@ type OrderRow = {
   delivery_address: unknown;
   delivery_instructions: string | null;
   site_id: string | null;
+  requester_email: string | null;
   created_at: string;
   inbound_email_id: string | null;
 };
@@ -209,7 +218,7 @@ export async function loadOrderDetail(
   const { data: orderData } = await supabase
     .from("orders")
     .select(
-      "id, order_number, status, retailer, company_id, retailer_store_id, materials_subtotal_cents, sizing_fee_cents, mileage_fee_cents, discount_cents, tax_cents, total_cents, delivery_size, delivery_address, delivery_instructions, site_id, created_at, inbound_email_id",
+      "id, order_number, status, retailer, company_id, retailer_store_id, materials_subtotal_cents, sizing_fee_cents, mileage_fee_cents, discount_cents, tax_cents, total_cents, delivery_size, delivery_address, delivery_instructions, site_id, requester_email, created_at, inbound_email_id",
     )
     .eq("id", orderId)
     .maybeSingle();
@@ -217,28 +226,44 @@ export async function loadOrderDetail(
   const order = orderData as OrderRow | null;
   if (!order) return null;
 
-  const [companyResult, itemsResult, emailResult, siteResult] = await Promise.all([
-    supabase.from("companies").select("name").eq("id", order.company_id).maybeSingle(),
-    supabase
-      .from("order_items")
-      .select("id, line_no, description, model_number, store_sku, quantity, image_url")
-      .eq("order_id", order.id)
-      .order("line_no", { ascending: true }),
-    order.inbound_email_id
-      ? supabase
-          .from("inbound_emails")
-          .select("id, sender_email, subject, received_at")
-          .eq("id", order.inbound_email_id)
-          .maybeSingle()
-      : Promise.resolve({ data: null }),
-    order.site_id
-      ? supabase
-          .from("company_sites")
-          .select("label, lat, lng")
-          .eq("id", order.site_id)
-          .maybeSingle()
-      : Promise.resolve({ data: null }),
-  ]);
+  const [companyResult, itemsResult, emailResult, siteResult, inviteResult] =
+    await Promise.all([
+      supabase
+        .from("companies")
+        .select("name, billing_email")
+        .eq("id", order.company_id)
+        .maybeSingle(),
+      supabase
+        .from("order_items")
+        .select("id, line_no, description, model_number, store_sku, quantity, image_url")
+        .eq("order_id", order.id)
+        .order("line_no", { ascending: true }),
+      order.inbound_email_id
+        ? supabase
+            .from("inbound_emails")
+            .select("id, sender_email, subject, received_at")
+            .eq("id", order.inbound_email_id)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
+      order.site_id
+        ? supabase
+            .from("company_sites")
+            .select("label, lat, lng")
+            .eq("id", order.site_id)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
+      supabase
+        .from("notifications")
+        .select("id, status")
+        .eq("order_id", order.id)
+        .eq("template_key", "checkout_invite")
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+  const company = companyResult.data as
+    | { name: string; billing_email: string | null }
+    | null;
 
   const site = siteResult.data as
     | { label: string | null; lat: number | null; lng: number | null }
@@ -316,8 +341,7 @@ export async function loadOrderDetail(
       deliverySize: order.delivery_size,
       createdAt: order.created_at,
     },
-    companyName:
-      (companyResult.data as { name: string } | null)?.name ?? "Unknown company",
+    companyName: company?.name ?? "Unknown company",
     items,
     email: emailResult.data
       ? {
@@ -333,6 +357,12 @@ export async function loadOrderDetail(
       address: addressLines(order.delivery_address),
       instructions: order.delivery_instructions,
     },
+    // The person who shared the cart is the one waiting on an answer, and their
+    // address is the only one we know is live for this customer — the portal
+    // user's email lives in `auth.users`, which needs the admin API to read.
+    // `billing_email` is the fallback, not the first choice.
+    inviteRecipient: order.requester_email ?? company?.billing_email ?? null,
+    inviteQueued: inviteResult.data !== null,
     store: chosen,
     alternatives,
     gates,

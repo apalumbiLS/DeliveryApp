@@ -1,13 +1,11 @@
 /**
  * Mailgun's inbound route posts here.
  *
- * Configure the route as:
+ * Configure one domain-scoped route with `forward()` to this parsed-email
+ * endpoint. Optional `store()` must have no `notify` URL here: storage
+ * notifications use a different payload and this handler cannot parse them.
  *
- *   match_recipient("(?P<alias>[^@]+)@<your-inbound-domain>")
- *   store(notify="https://<app>/api/webhooks/mailgun/inbound")
- *   forward("https://<app>/api/webhooks/mailgun/inbound")
- *
- * See docs/architecture/05-email-intake.md.
+ * See docs/architecture/05-email-intake.md for the operator-run route setup.
  *
  * Response policy: `406` when the signature does not verify — write nothing and
  * let Mailgun give up. `500` when our own work failed, so Mailgun retries a

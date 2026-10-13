@@ -2,7 +2,7 @@
 
 Environments, configuration, prerequisites, and the release process.
 
-> **Status:** Planned design. Not yet implemented — no Supabase project exists yet. The base schema is written (`supabase/migrations/0001_baseline.sql`); the prerequisites below are Phase 1 work.
+> **Status:** Prototype intake code exists. The team has reported applying migrations through `0006`; confirm the target database's migration history before applying new ones. Receiving MX and a real Mailgun → Vercel delivery have not been verified. Mailgun/DNS/Vercel account changes are user-operated.
 
 ---
 
@@ -12,42 +12,42 @@ Environments, configuration, prerequisites, and the release process.
 | ---------------- | ----------------------------- | ------------------------- | ---------------------------- |
 | App              | `next dev`                    | Vercel preview deploy     | Vercel production            |
 | Database         | Supabase CLI (local Postgres) | Staging Supabase project  | Production Supabase project  |
-| Inbound email    | Mailgun sandbox subdomain     | `orders.staging.<domain>` | `orders.<domain>`            |
-| Outbound email   | Mailgun sandbox               | Mailgun staging subdomain | Mailgun production subdomain |
+| Inbound email    | Signed fixture requests      | Your verified temporary receiving domain + MX | Client's verified receiving domain + MX |
+| Outbound email   | Not implemented               | Not implemented           | Not implemented in this intake milestone |
 | SMS              | Twilio test credentials       | Twilio test credentials   | Twilio live                  |
 | Payments         | Stripe test                   | Stripe test               | Stripe live                  |
 | Scheduled sweeps | Call the cron routes manually | Manual (cron disabled)    | Vercel Cron                  |
 
 ### Why staging needs its own email subdomain
 
-Mailgun routes are scoped to a **domain**, not a URL. If staging and production share a domain, every inbound cart email is delivered to both environments — staging would create duplicate orders against test data for real customers' carts, and staging failures would be indistinguishable from production ones.
+Mailgun routes are scoped to a **receiving domain**. For the prototype, use your verified temporary domain and route to one stable Vercel deployment. When the client's account comes online, use a separate receiving domain and account key. Do not configure two callbacks for one email or reuse a receiving domain across independent deployments: you would create duplicate or misattributed orders.
 
-A separate subdomain is the only clean isolation. It is a prerequisite, not an optimisation.
+Keeping the old prototype domain live for a short overlap requires **explicit support for its separate webhook signing key**. That dual-account support is a later implementation phase; do not treat a second environment variable alone as proof that the app accepts the old domain.
 
 ---
 
 ## Prerequisites checklist
 
-Everything here is Phase 1 work. Items marked **blocking** prevent Phase 2 from starting.
+This list mixes immediate receiving prerequisites with later delivery systems. **Only the verified inbound domain/MX, reachable signed callback, and applied intake schema block the live mail-to-dispatcher milestone.** Outbound, payments and driver SMS are separate projects.
 
 | #   | Item                                          | Owner | Notes                                        |
 | --- | --------------------------------------------- | ----- | -------------------------------------------- |
-| 1   | **Domain purchased** — blocking               |       | e.g. `quickconstruction.example`             |
-| 2   | **Mailgun account** — blocking                |       |                                              |
-| 3   | MX records for `orders.<domain>` → Mailgun    |       |                                              |
-| 4   | SPF + DKIM records for sending                |       | Deliverability                               |
-| 5   | Staging subdomain `orders.staging.<domain>`   |       | Environment isolation                        |
-| 6   | Mailgun inbound routes (both domains)         |       | `store()` + `forward()`                      |
-| 7   | Mailgun signing key into app config           |       | Webhook verification                         |
-| 8   | **Supabase production project** (`us-east-1`) |       | Exists — needs project created               |
-| 9   | Supabase staging project                      |       |                                              |
-| 10  | **Vercel project**                            |       | Exists — needs linking                       |
+| 1   | **Your verified receiving domain** — available | You | Confirm the intended subdomain in your temporary Mailgun account |
+| 2   | **Your temporary Mailgun account** — available | You | Use the HTTP webhook signing key, not the API key |
+| 3   | **Receiving MX** — not confirmed | You | Install and verify Mailgun-provided records for that domain |
+| 4   | **Outbound SPF/DKIM** — deferred | You | Only needed once real customer email sending exists |
+| 5   | **Client receiving domain** — later | Client | New domain and account; overlap requires dual signing keys in app |
+| 6   | **One Mailgun forward route** | You | Parsed `forward()` to the webhook; optional `store()` without `notify` |
+| 7   | Webhook signing key in Vercel config          | You | Do not log or commit it |
+| 8   | Supabase project and schema                   | You | Reported applied through `0006`; verify before applying `0007` |
+| 9   | Separate Supabase staging project             | You | Recommended for live acceptance without production data |
+| 10  | **Stable public Vercel deployment**           | You | Check deployment protection does not block provider POSTs |
 | 11  | **Stripe account**                            |       |                                              |
 | 12  | Stripe webhook endpoints (per environment)    |       |                                              |
 | 13  | **Twilio account** + sender number            |       | A2P registration may take days — start early |
 | 14  | Vercel Cron schedule configured               |       | Notifications outbox + broadcast expiry      |
-| 15  | LLM provider API key                          |       | Parse fallback                               |
-| 16  | Upstate SC store list seeded                  |       | Dispatcher picks from this                   |
+| 15  | LLM provider API key                          |       | Deferred; deterministic Lowe's parser is the prototype path |
+| 16  | North Carolina Lowe's store list              |       | Pilot seed already exists; confirm stores relevant to the pilot site |
 
 Item 13 deserves emphasis: US A2P 10DLC registration is not instant. Starting it late blocks driver SMS, which blocks dispatch.
 
@@ -70,10 +70,8 @@ SUPABASE_SECRET_KEY=                    # sb_secret_...  server-only, never NEXT
 MAILGUN_API_KEY=                    # outbound sending + the Messages API
 MAILGUN_SIGNING_KEY=                # inbound webhook verification (HMAC)
 MAILGUN_DOMAIN=                     # outbound sending domain
-ORDER_ALIAS_DOMAIN=                 # the domain customers send carts to. This is
-                                    # also the inbound domain — one value, since
-                                    # a Mailgun route only fires for a domain
-                                    # whose MX records point at Mailgun.
+ORDER_ALIAS_DOMAIN=                 # your temporary verified inbound domain, never gmail.com
+ORDER_INTAKE_READY=false            # set true only after YOU verify receiving MX, one forward(), and public Vercel callback
 
 # Twilio
 TWILIO_ACCOUNT_SID=
@@ -101,30 +99,28 @@ Two guardrails:
 - **`SUPABASE_SECRET_KEY` is never prefixed `NEXT_PUBLIC_`.** A `NEXT_PUBLIC_` prefix ships a value to the browser; this key bypasses all RLS. The legacy `service_role` key had the same property — the rename does not change the rule.
 - **The app asserts `APP_ENV` against key modes at startup.** A `sk_live_` Stripe key with `APP_ENV=preview` is a misconfiguration that would charge real customers from a test environment. Fail fast instead.
 
+## Temporary Mailgun receiving setup
+
+This is an **operator-run** checklist. Do not put keys, real webhook URLs with protection bypass secrets, or customer emails in source control or chat.
+
+1. Confirm which **verified domain/subdomain** in your Mailgun account will receive Lowe's carts. Install the **MX records shown in your account** for that receiving domain. Domain ownership verification alone does not establish inbound delivery. Send an external test email to a controlled recipient on that domain and confirm Mailgun received it.
+2. Deploy the Next.js app to a **stable public Vercel HTTPS host**. Confirm its `/api/webhooks/mailgun/inbound` endpoint is reachable by Mailgun. If the deployment is protected, configure a provider-compatible Vercel bypass out of band or use a suitable public deployment. The Mailgun HMAC still authenticates the actual POST.
+3. Create **one** Mailgun route scoped to the exact receiving domain with `forward("https://<stable-app-host>/api/webhooks/mailgun/inbound")`. Optional `store()` must **not** use `notify` with that URL: a storage notification is not parsed cart form data. Keep the callback URL free of `json`/`mime` suffixes unless the parser is deliberately changed.
+4. In Vercel, set the server-only `MAILGUN_SIGNING_KEY` to that account's **HTTP webhook signing key**, `ORDER_ALIAS_DOMAIN` to the receiving domain, and the Supabase server/browser keys required by the app. `MAILGUN_API_KEY` and `MAILGUN_DOMAIN` are outbound/storage API settings; they do not replace the webhook signing key. Do not display an address as live yet.
+5. Verify one signed Mailgun `forward()` arrives with the **SMTP envelope recipient, message headers, HTML body, and an acceptable HTTP status**. Record only safe status/identifiers in logs, not secrets or raw customer email. **Keep `ORDER_INTAKE_READY=false` for now:** the current processor does not yet validate the recipient domain, is not atomic and does not show every exception in the dispatcher queue. After those later phases and a real mail-to-queue test pass, set the flag to `true` and redeploy. No outbound customer message is sent on receipt.
+
+A current `.eml` fixture tests the parser, not Mailgun's real form payload, provider retries, or receiving DNS. More detail and the later one-use portal address are in [05-email-intake](05-email-intake.md).
+
 ### Swapping the Mailgun account
 
-The account in use is temporary until the client's is set up. Swapping it must stay a configuration change, never a code change — nothing in the inbound path reads a Mailgun value from anywhere but the environment.
+**The client uses a new domain.** Keeping the company's existing local part means its full address still changes, so tell customers and preserve a short period in which the old address is accepted for in-flight carts. Never assume changing `MAILGUN_SIGNING_KEY` and `ORDER_ALIAS_DOMAIN` alone is an overlap strategy: Mailgun keys are per account.
 
-| Variable | Needed for | Changes when swapping |
-|---|---|---|
-| `MAILGUN_SIGNING_KEY` | Verifying the webhook's HMAC signature | **Yes** — it is per-account |
-| `ORDER_ALIAS_DOMAIN` | The customer-facing address, and the domain a route fires for | **Yes** — the temporary domain differs |
-| `MAILGUN_API_KEY` | Outbound sending and the Messages API | **Yes** |
-| `MAILGUN_DOMAIN` | Outbound sending domain | **Yes** |
+1. Before switching, ship and test **domain-to-key pairing** for both old and new inbound domains, with no fallback from the old domain to the new account's key. This dual-account handling is **not implemented yet**.
+2. Have the client set up/verify their receiving domain and MX, and configure one `forward()` route to the same deployed endpoint. Test the new domain with a fresh cart before advertising it.
+3. Put the client's domain/signing key into the **current** Vercel variables; keep the temporary domain/key in separate **legacy** variables during the overlap. Deploy and verify both routes. The portal shows only the client's domain; historical orders and incoming duplicate handling retain their recipient domain.
+4. Communicate the address change. After a separately agreed grace period and a check that no in-flight carts still use the prototype domain, retire its Mailgun route and legacy key. Do **not** delete old email or queued notifications.
 
-Steps, in order:
-
-1. Add the new domain to Mailgun and point its MX records at Mailgun.
-2. Create the inbound route — `match_recipient("(?P<alias>[^@]+)@<new-domain>")` with both `store(notify="…/api/webhooks/mailgun/inbound")` and `forward("…/api/webhooks/mailgun/inbound")`.
-3. Update the four variables in Vercel and in `web/.env.local`.
-4. Redeploy — Vercel bakes environment variables at build time.
-5. **Re-point the customer-facing alias.** A company's `order_alias` is a local part and does not change, but the domain customers type does. Anyone mid-order needs telling.
-6. Verify by sending a test cart and confirming an order appears.
-
-Two things to watch:
-
-- **`isMailgunConfigured()` gates the inbound route.** With the signing key unset the webhook returns a notice rather than accepting unsigned posts, so a half-finished swap fails closed instead of open.
-- **Staging must not share the new domain.** Mailgun routes are scoped per domain, so a shared domain delivers every real cart email into both environments — see [Why staging needs its own email subdomain](#why-staging-needs-its-own-email-subdomain).
+Outbound setup, verified sending domain, and a real customer-confirmation page are separate milestones; activating inbound does not activate outbound.
 
 ---
 
@@ -176,7 +172,7 @@ bun run dev             # Next.js
 # cron sweeps: curl -H "Authorization: Bearer $CRON_SECRET" localhost:3000/api/cron/drain-notifications
 ```
 
-Inbound email locally: use the Mailgun sandbox subdomain, or POST a saved fixture directly at the webhook with a valid signature generated from the signing key. Fixture-based testing is preferred — it is deterministic and needs no network.
+Locally, test the parser with the committed Lowe's fixture and route-level tests without live credentials. Mailgun cannot POST to `localhost` without a public tunnel, and its sandbox receiving rules may differ from your verified-domain route. A signed fixture POST proves local request handling, **not** Mailgun MX, payload format or Vercel reachability. The live acceptance run is user-operated after the intake hardening phases.
 
 ---
 
