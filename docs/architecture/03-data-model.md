@@ -2,7 +2,7 @@
 
 Schema conventions, the entity relationship diagram, and a table-by-table reference.
 
-> **Status:** Schema written as `supabase/migrations/0001_baseline.sql`. Not yet applied to any environment.
+> **Status:** The client-pilot project has applied migrations through `0010`. Migration `0011_dispatcher_draft_updates.sql` is prepared for review and has not been applied or SQL-tested.
 
 ---
 
@@ -182,7 +182,7 @@ Every message that reaches the inbound webhook, stored before any interpretation
 | `order_id`           | uuid FK → orders                                     | Null until dispatcher approval finalizes an order     |
 | `received_at`        | timestamptz NOT NULL                                 |                                                        |
 
-Storing the HTML email and headers before interpreting them makes the parser re-runnable. The full raw MIME is **not** currently stored in `raw_storage_path`; optional Mailgun `store()` (without `notify`) is the temporary backup. Parsed contents are provisional until a dispatcher approves; migration `0009` defines the one-call SQL finalization contract for order, items, intent claim, audit event and inbound link. The user applied `0009` and approved one real cart. Migration `0010` updates the intent-recipient check and has not been applied or DB-tested.
+Storing the HTML email and headers before interpreting them makes the parser re-runnable. The full raw MIME is **not** currently stored in `raw_storage_path`; optional Mailgun `store()` (without `notify`) is the temporary backup. Parsed contents are provisional until a dispatcher approves; migration `0009` defines the one-call SQL finalization contract for order, items, intent claim, audit event and inbound link. The user applied `0009` and approved one real cart. The user applied `0010` and verified that a new token cart mapped to the intended company and store after approval.
 
 ### `parse_attempts`
 
@@ -212,17 +212,17 @@ One row per extraction attempt — the telemetry that makes template drift visib
 | `inbound_email_id`          | uuid FK → inbound_emails                 |                                                                   |
 | `retailer`                  | retailer NOT NULL                        |                                                                   |
 | `retailer_store_id`         | uuid FK → retailer_stores                | **Null until the dispatcher sets it**                             |
-| `status`                    | order_status NOT NULL DEFAULT 'received' | Written only by `transitionOrder()`                               |
+| `status`                    | order_status NOT NULL DEFAULT 'received' | Pilot dispatcher edits keep `received`/`needs_review`; no checkout transition |
 | `requester_name`            | text                                     | Parsed from the email subject                                     |
 | `requester_email`           | citext                                   |                                                                   |
-| `materials_subtotal_cents`  | int NOT NULL DEFAULT 0                   | From the cart email                                               |
+| `materials_subtotal_cents`  | int NOT NULL DEFAULT 0                   | Lowe's share email has no price; zero means unknown until the dispatcher enters an estimate |
 | `sizing_fee_cents`          | int NOT NULL DEFAULT 0                   | Dispatcher-entered                                                |
 | `mileage_fee_cents`         | int NOT NULL DEFAULT 0                   | Dispatcher-entered                                                |
 | `discount_cents`            | int NOT NULL DEFAULT 0                   |                                                                   |
 | `tax_cents`                 | int NOT NULL DEFAULT 0                   |                                                                   |
 | `total_cents`               | int NOT NULL DEFAULT 0                   | Computed                                                          |
 | `quote_breakdown`           | jsonb                                    | Line-item explanation shown to the customer                       |
-| `delivery_address`          | jsonb                                    | Snapshot at checkout                                              |
+| `delivery_address`          | jsonb                                    | Intent or dispatcher-confirmed snapshot; includes `contactName` and `contactPhone` after confirmation |
 | `delivery_instructions`     | text                                     |                                                                   |
 | `site_id`                   | uuid FK → company_sites                  | Provenance only                                                   |
 | `delivery_size`             | delivery_size                            | `car` / `pickup` / `truck` — the vehicle class the sizing fee is keyed to. Null until a dispatcher picks one; added by migration `0006` |
@@ -231,6 +231,8 @@ One row per extraction attempt — the telemetry that makes template drift visib
 | `confirmed_by_profile_id`   | uuid FK → profiles                       | Set when a dispatcher completes checkout on the customer's behalf |
 | `cancellation_reason`       | text                                     | Unused in MVP; present so cancellation is additive                |
 | `created_at` / `updated_at` | timestamptz NOT NULL DEFAULT now()       |                                                                   |
+
+Migration `0011` defines `update_dispatcher_draft`: only an authenticated active dispatcher can update an open order's store, delivery/contact snapshot, or materials estimate and fees. The update and a same-status audit event commit together. A manually changed address clears a stale `site_id`. This function is prepared but has not been executed against Postgres; mock tests verify only the RPC call contract.
 
 `confirmed_by_profile_id` is the audit answer to "who agreed to this price". When the customer completes checkout it stays null and `customer_confirmed_at` is the evidence; when a dispatcher completes it on their behalf, both are set.
 

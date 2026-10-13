@@ -16,6 +16,46 @@ import { parseCart, selectParser, senderDomain } from "./index";
 const fixture = readEmlFixture("lowes/multi-item.eml");
 
 describe("LowesCartParser", () => {
+  test("reads a redacted structural excerpt from a second pilot cart", () => {
+    const bodyHtml = `
+      <p>Sent from the cart of pilot@example.com</p>
+      <table class="container"><tr><td>
+        <img src="https://mobileimages.lowes.com/productimages/washer.jpeg">
+        <a><strong>Top-load washer</strong></a>
+        Item: #5684052 | Model: #GTW485ASWWB <strong>Quantity 1</strong>
+      </td></tr></table>
+      <table class="container"><tr><td>
+        <img src="https://mobileimages.lowes.com/productimages/hose.jpeg">
+        <a><strong>Stainless washing machine connector</strong></a>
+        Item: #246995 | Model: #98506 <strong>Quantity 1</strong>
+      </td></tr></table>
+      <table class="container"><tr><td>
+        <img src="https://mobileimages.lowes.com/productimages/trim.jpeg">
+        <a><strong>Oak reducer floor moulding trim</strong></a>
+        Item: #6570526 | Model: #LX50305083 <strong>Quantity 1</strong>
+      </td></tr></table>`;
+    const outcome = parseCart({
+      bodyHtml,
+      senderEmail: "bounce@bounce.e.lowes.com",
+      subject: "Check out this Lowe's shopping cart.",
+    });
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(
+      outcome.cart.items.map((item) => [
+        item.storeSku,
+        item.modelNumber,
+        item.quantity,
+      ]),
+    ).toEqual([
+      ["5684052", "GTW485ASWWB", 1],
+      ["246995", "98506", 1],
+      ["6570526", "LX50305083", 1],
+    ]);
+    expect(outcome.cart.requesterEmail).toBe("pilot@example.com");
+    expect(outcome.cart.totals).toBeNull();
+  });
+
   test("reads the captured cart exactly", () => {
     const outcome = parseCart(fixture);
 

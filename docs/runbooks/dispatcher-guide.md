@@ -2,7 +2,7 @@
 
 Operating the delivery platform, order by order.
 
-> **Status:** A live shared-address Lowe's cart was manually approved into an order after migration `0009` was applied. The optional `delivery+<token>` address requires migration `0010` and a separate live test. The delivery, checkout and payment sections below describe future behavior, **not** capabilities available for the client test. See [00-overview](../architecture/00-overview.md).
+> **Status:** A live shared-address Lowe's cart was manually approved into an order after migration `0009` was applied. The optional `delivery+<token>` address has been tested with migration `0010`. Delivery/contact, store, and pricing draft edits in Phase 4B require new migration `0011` and dispatcher review; checkout and payment below remain future capabilities, **not** available to the client test. See [00-overview](../architecture/00-overview.md).
 >
 > This replaces the low-tech Google Sheets + Slack runbook in `External Notes/Low Tech Flow.pdf`. That process is retired.
 
@@ -43,7 +43,7 @@ flowchart LR
 
 **Where:** `/dispatch/review`
 
-Inbound emails enter the **same worklist** as orders, but do not automatically become orders. A Lowe's email with validated line items appears as a **provisional preview**, since a From address or DKIM header alone does not authenticate the sender. Verify the source and company before approving; approval runs the transactional finalization function. New `delivery+` addresses require migration `0010` for their saved site/store to be claimed. An unknown address can be attached to a company only after off-platform verification, or dismissed. A failed parse shows its reason and original email; it **cannot** be approved as a valid item list. Request a fresh cart or wait for a later correction tool. No driver job is created from a provisional email.
+Inbound emails enter the **same worklist** as orders, but do not automatically become orders. A Lowe's email with validated line items appears as a **provisional preview**, since a From address or DKIM header alone does not authenticate the sender. Verify the source and company before approving; approval runs the transactional finalization function. A `delivery+` address identifies its company and, while unused, previews the saved site/store before approval; the original email's requester address is only an unverified clue. An unknown address can be attached to a company only after off-platform verification, or dismissed. A failed parse shows its reason and original email; it **cannot** be approved as a valid item list. Request a fresh cart or wait for a later correction tool. No driver job is created from a provisional email.
 
 ### Resolving a failed parse
 
@@ -56,13 +56,13 @@ You do not need to be fast. A cart that fails to parse is a signal the retailer 
 
 ---
 
-## 2. Set the store
+## 2. Confirm delivery and Lowe's store
 
 **Where:** the order detail page
 
-The cart email does **not** contain the store — this is a limitation of the retailer's email, not a bug. You must select it from the seeded store list.
+For a direct email, contact the customer and record a complete delivery address, on-site contact name/phone, and any instructions. A portal-token request carries a saved address and store, but still needs an on-site contact. The cart email itself contains neither a store nor an address.
 
-Pick the store nearest the customer's delivery address. The delivery address is shown next to the store picker so you can sanity-check proximity.
+Confirm the selected store with the customer or choose one from the Lowe's list. Distances are only shown when the saved site has coordinates; a manually entered address has no fabricated distance. Save actions show a success or error message and append an audit event without changing the order status.
 
 > **This is the highest-consequence manual step in the system.** Nothing in the email lets us verify the customer built their cart for the store you choose. A wrong store means a driver drives to the wrong place and the cart may not be purchasable there.
 
@@ -78,7 +78,7 @@ Enter the sizing fee and the mileage fee. The total is computed:
 materials subtotal + sizing fee + mileage fee − discount + tax = total
 ```
 
-Lowe's sends **no materials prices** in the share-cart email. A dispatcher has to obtain the estimate and enter materials, sizing and mileage amounts by hand. The order's initial zero is an unknown amount, not a free delivery.
+Lowe's sends **no materials prices** in the share-cart email. A dispatcher has to obtain the estimate and enter materials, sizing and mileage amounts by hand. The order's initial zero is an unknown amount, not a free delivery. Materials must be positive and a delivery size selected before the pricing gate passes; fees alone do not count as materials.
 
 The fee structure is not yet settled — that is why you enter fees rather than the system calculating them. When the pricing model is decided, this becomes a rules table.
 

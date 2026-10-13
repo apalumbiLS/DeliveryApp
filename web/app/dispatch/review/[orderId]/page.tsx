@@ -26,6 +26,7 @@ import { Button } from "@/components/ui/button";
 import { AlertIcon } from "@/components/ui/icons";
 import {
   queueCheckoutInvite,
+  updateOrderDelivery,
   updateOrderQuote,
   updateOrderStore,
 } from "@/lib/dispatch/actions";
@@ -63,6 +64,33 @@ function shortAge(iso: string): string {
   if (minutes < 60 * 24) return `${Math.round(minutes / 60)}h`;
   return `${Math.round(minutes / (60 * 24))}d`;
 }
+
+const draftMessages: Record<string, { ok: boolean; text: string }> = {
+  "store-saved": { ok: true, text: "Store saved." },
+  "store-invalid": { ok: false, text: "Choose a Lowe's store before saving." },
+  "store-error": {
+    ok: false,
+    text: "Store was not saved. Refresh and try again.",
+  },
+  "delivery-saved": { ok: true, text: "Delivery details saved." },
+  "delivery-invalid": {
+    ok: false,
+    text: "Enter a complete address and on-site contact.",
+  },
+  "delivery-error": {
+    ok: false,
+    text: "Delivery details were not saved. Refresh and try again.",
+  },
+  "quote-saved": { ok: true, text: "Materials estimate and fees saved." },
+  "quote-invalid": {
+    ok: false,
+    text: "Pick a size and enter valid dollar amounts.",
+  },
+  "quote-error": {
+    ok: false,
+    text: "Pricing was not saved. Refresh and try again.",
+  },
+};
 
 function QueueRail({
   queue,
@@ -243,7 +271,11 @@ function DeliveryBand({
       title="2 · Verify the delivery & price"
       status={
         <Badge tone={storeGate?.state === "warn" ? "warning" : "info"} bordered>
-          {storeGate?.state === "warn" ? "Store looks far" : "From the portal"}
+          {storeGate?.state === "warn"
+            ? "Store looks far"
+            : detail.delivery.label
+              ? "Portal site"
+              : "Confirm delivery"}
         </Badge>
       }
     >
@@ -254,7 +286,7 @@ function DeliveryBand({
               Deliver to
             </span>
             <span className="text-[10.5px] text-ink-faint">
-              from the portal
+              {detail.delivery.label ? "portal site" : "confirm with customer"}
             </span>
           </div>
           <div className="mt-1.5 rounded-field border border-hairline bg-card-muted px-2.5 py-2">
@@ -264,6 +296,12 @@ function DeliveryBand({
             <div className="mt-0.5 text-[11px] leading-relaxed text-ink-muted">
               {detail.delivery.address ?? "No address captured"}
             </div>
+            {detail.delivery.fields.contactName ? (
+              <div className="mt-1 text-[11px] text-ink-muted">
+                {detail.delivery.fields.contactName} ·{" "}
+                {detail.delivery.fields.contactPhone}
+              </div>
+            ) : null}
             {detail.delivery.instructions ? (
               <div className="mt-1.5 border-t border-hairline-soft pt-1.5 text-[10.5px] leading-relaxed text-ink-faint">
                 {detail.delivery.instructions}
@@ -278,7 +316,9 @@ function DeliveryBand({
             <span className="text-[11.5px] font-medium text-ink-muted">
               Store
             </span>
-            <span className="text-[10.5px] text-ink-faint">nearest first</span>
+            <span className="text-[10.5px] text-ink-faint">
+              nearest if known
+            </span>
           </div>
 
           <div className="mt-1.5 rounded-field border border-hairline bg-card px-2.5 py-2">
@@ -286,7 +326,7 @@ function DeliveryBand({
               {detail.store?.name ?? "No store chosen"}
             </div>
             <div className="mt-0.5 flex items-center justify-between gap-2 text-[10.5px] text-ink-faint">
-              <span>{detail.store ? "chosen in the portal" : "pick one"}</span>
+              <span>{detail.store ? "selected store" : "pick one"}</span>
               <span className="tabular-nums">
                 {detail.store?.miles != null
                   ? formatDistance(detail.store.miles)
@@ -310,18 +350,12 @@ function DeliveryBand({
             <option value="" disabled>
               Choose a store
             </option>
-            {[detail.store, ...detail.alternatives]
-              .filter((option): option is NonNullable<typeof option> =>
-                Boolean(option),
-              )
-              .map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.label ?? option.name}
-                  {option.miles != null
-                    ? ` — ${option.miles.toFixed(1)} mi`
-                    : ""}
-                </option>
-              ))}
+            {detail.storeOptions.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label ?? option.name}
+                {option.miles != null ? ` — ${option.miles.toFixed(1)} mi` : ""}
+              </option>
+            ))}
           </select>
 
           <Button type="submit" intent="secondary" size="sm" className="mt-2">
@@ -361,13 +395,18 @@ function DeliveryBand({
               <span className="text-[11.5px] text-ink-muted">
                 Materials
                 <span className="ml-1.5 text-[10.5px] text-ink-faint">
-                  enter from the cart
+                  Lowe&apos;s does not supply prices
                 </span>
               </span>
               <input
                 name="materials"
                 inputMode="decimal"
-                defaultValue={dollars(detail.order.materialsCents)}
+                defaultValue={
+                  detail.order.materialsCents
+                    ? dollars(detail.order.materialsCents)
+                    : ""
+                }
+                placeholder="Not priced"
                 className="w-20 rounded-control border border-hairline bg-card px-2 py-1 text-right text-[12px] tabular-nums"
               />
             </div>
@@ -409,6 +448,64 @@ function DeliveryBand({
           </div>
         </form>
       </div>
+      <form
+        action={updateOrderDelivery}
+        className="mt-3 border-t border-hairline-soft pt-3"
+      >
+        <input type="hidden" name="orderId" value={orderId} />
+        <h3 className="text-[12px] font-medium text-ink">
+          Confirm delivery with the customer
+        </h3>
+        <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {(
+            [
+              ["line1", "Street address", detail.delivery.fields.line1],
+              [
+                "line2",
+                "Suite / building (optional)",
+                detail.delivery.fields.line2,
+              ],
+              ["city", "City", detail.delivery.fields.city],
+              ["state", "State", detail.delivery.fields.state],
+              ["postalCode", "ZIP code", detail.delivery.fields.postalCode],
+              [
+                "contactName",
+                "On-site contact",
+                detail.delivery.fields.contactName,
+              ],
+              [
+                "contactPhone",
+                "Contact phone",
+                detail.delivery.fields.contactPhone,
+              ],
+            ] as const
+          ).map(([name, label, value]) => (
+            <label key={name} className="text-[11px] text-ink-muted">
+              {label}
+              <input
+                name={name}
+                defaultValue={value}
+                required={name !== "line2"}
+                type={name === "contactPhone" ? "tel" : "text"}
+                className="mt-1 block w-full rounded-control border border-hairline bg-card px-2 py-1.5 text-[12px] text-ink"
+              />
+            </label>
+          ))}
+          <label className="text-[11px] text-ink-muted sm:col-span-2 lg:col-span-3">
+            Delivery instructions (optional)
+            <textarea
+              name="instructions"
+              defaultValue={detail.delivery.fields.instructions}
+              rows={2}
+              maxLength={1000}
+              className="mt-1 block w-full rounded-control border border-hairline bg-card px-2 py-1.5 text-[12px] text-ink"
+            />
+          </label>
+        </div>
+        <Button type="submit" intent="secondary" size="sm" className="mt-2">
+          Save delivery details
+        </Button>
+      </form>
     </Band>
   );
 }
@@ -494,6 +591,8 @@ export default async function ReviewOrderPage(
   props: PageProps<"/dispatch/review/[orderId]">,
 ) {
   const { orderId } = await props.params;
+  const { draft } = await props.searchParams;
+  const feedback = typeof draft === "string" ? draftMessages[draft] : null;
   const { supabase } = await requireDispatcher();
 
   const [queue, detail, exceptions] = await Promise.all([
@@ -508,6 +607,19 @@ export default async function ReviewOrderPage(
     <div className="flex min-h-full">
       <QueueRail queue={queue} exceptions={exceptions} selectedId={orderId} />
       <div className="flex min-w-0 flex-1 flex-col px-4 py-3.5">
+        {feedback ? (
+          <p
+            role={feedback.ok ? "status" : "alert"}
+            className={cn(
+              "mb-3 rounded-field px-3 py-2 text-[12px]",
+              feedback.ok
+                ? "bg-success-bg text-success-ink"
+                : "bg-danger-bg text-danger-ink",
+            )}
+          >
+            {feedback.text}
+          </p>
+        ) : null}
         <div className="space-y-3">
           <ItemsBand detail={detail} orderId={orderId} />
           <DeliveryBand detail={detail} orderId={orderId} />

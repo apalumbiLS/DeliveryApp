@@ -7,7 +7,10 @@ import {
   fakeSupabase,
 } from "@/lib/intake/__fixtures__/fake-supabase";
 
-import { listInboundExceptions } from "./review-queue";
+import {
+  listInboundExceptions,
+  loadInboundIntentPreview,
+} from "./review-queue";
 
 test("review includes pending inbound mail but excludes resolved mail", async () => {
   const db = emptyDatabase();
@@ -55,4 +58,48 @@ test("review includes pending inbound mail but excludes resolved mail", async ()
   expect(rows[0].companyName).toBe("Pilot company");
   expect(rows[1].companyName).toBeNull();
   expect(rows[1].reason).toBe("Unknown company address");
+});
+
+test("a fresh token previews its company, site and store; a used token does not reuse them", async () => {
+  const db = emptyDatabase();
+  const token = "a".repeat(32);
+  db.companies.push({ id: "company-1", active: true });
+  db.order_intents.push({
+    id: "intent-1",
+    email_token: token,
+    company_id: "company-1",
+    retailer: "lowes",
+    status: "open",
+    site_id: "site-1",
+    retailer_store_id: "store-1",
+    delivery_address: {
+      line1: "42 Test Street",
+      city: "Greenville",
+      state: "SC",
+      postalCode: "29601",
+    },
+  });
+  db.company_sites = [{ id: "site-1", label: "Pilot site" }];
+  db.retailer_stores = [{ id: "store-1", name: "Pilot Lowe's" }];
+  const client = fakeSupabase(db) as unknown as SupabaseClient;
+  const recipient = `delivery+${token}@orders.example.com`;
+  expect(
+    await loadInboundIntentPreview(client, recipient, "orders.example.com"),
+  ).toEqual({
+    companyId: "company-1",
+    eligible: true,
+    store: "Pilot Lowe's",
+    site: "Pilot site",
+    address: "42 Test Street · Greenville, SC · 29601",
+  });
+  db.order_intents[0].status = "matched";
+  expect(
+    await loadInboundIntentPreview(client, recipient, "orders.example.com"),
+  ).toEqual({
+    companyId: "company-1",
+    eligible: false,
+    store: null,
+    site: null,
+    address: null,
+  });
 });

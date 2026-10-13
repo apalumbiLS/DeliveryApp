@@ -1,5 +1,5 @@
 /**
- * What still blocks the checkout invite.
+ * What still blocks a complete dispatcher draft and any future checkout invite.
  *
  * Pure, so it can be tested without a database or a browser — and so the screen
  * and any future server-side guard agree on what "ready" means.
@@ -33,6 +33,7 @@ export type GateInput = {
   storeMiles: number | null;
   nearestMiles: number | null;
   hasDeliveryAddress: boolean;
+  hasSiteContact: boolean;
   deliverySize: string | null;
   materialsCents: number;
   /** Materials + sizing + mileage + tax − discount. */
@@ -52,19 +53,20 @@ function miles(value: number | null): string {
 }
 
 export function computeGates(input: GateInput): Gate[] {
-  const items: Gate = input.parseSucceeded && input.itemCount > 0
-    ? {
-        key: "items",
-        label: "Items",
-        state: "pass",
-        detail: `${input.itemCount} line${input.itemCount === 1 ? "" : "s"}`,
-      }
-    : {
-        key: "items",
-        label: "Items",
-        state: "fail",
-        detail: "the cart could not be read — correct the lines below",
-      };
+  const items: Gate =
+    input.parseSucceeded && input.itemCount > 0
+      ? {
+          key: "items",
+          label: "Items",
+          state: "pass",
+          detail: `${input.itemCount} line${input.itemCount === 1 ? "" : "s"}`,
+        }
+      : {
+          key: "items",
+          label: "Items",
+          state: "fail",
+          detail: "the cart could not be read — correct the lines below",
+        };
 
   let store: Gate;
   if (!input.storeName) {
@@ -90,28 +92,32 @@ export function computeGates(input: GateInput): Gate[] {
       key: "store",
       label: "Store",
       state: "pass",
-      detail: input.storeMiles === null ? input.storeName : miles(input.storeMiles),
+      detail:
+        input.storeMiles === null ? input.storeName : miles(input.storeMiles),
     };
   }
 
-  const address: Gate = input.hasDeliveryAddress
-    ? { key: "address", label: "Address", state: "pass" }
-    : {
-        key: "address",
-        label: "Address",
-        state: "fail",
-        detail: "no delivery address — it comes from the customer's order intent",
-      };
+  const address: Gate =
+    input.hasDeliveryAddress && input.hasSiteContact
+      ? { key: "address", label: "Address & contact", state: "pass" }
+      : {
+          key: "address",
+          label: "Address & contact",
+          state: "todo",
+          detail: !input.hasDeliveryAddress
+            ? "enter the delivery address"
+            : "confirm an on-site contact",
+        };
 
   // Lowe's prints no prices, so materials starts at zero and the dispatcher
   // enters it. That is a `todo`, not a failure.
   const price: Gate =
-    input.totalCents > 0
+    input.deliverySize && input.materialsCents > 0 && input.totalCents > 0
       ? {
           key: "price",
           label: "Size & price",
           state: "pass",
-          detail: input.deliverySize ?? undefined,
+          detail: input.deliverySize,
         }
       : {
           key: "price",
@@ -119,7 +125,7 @@ export function computeGates(input: GateInput): Gate[] {
           state: "todo",
           detail: !input.deliverySize
             ? "pick a size"
-            : input.materialsCents === 0
+            : input.materialsCents <= 0
               ? "enter the materials cost"
               : "enter the fees",
         };
@@ -133,5 +139,7 @@ export function computeGates(input: GateInput): Gate[] {
  * A `warn` is a warning and never blocks — see `STORE_DISTANCE_WARNING_MILES`.
  */
 export function blockingGate(gates: Gate[]): Gate | null {
-  return gates.find((gate) => gate.state === "fail" || gate.state === "todo") ?? null;
+  return (
+    gates.find((gate) => gate.state === "fail" || gate.state === "todo") ?? null
+  );
 }

@@ -3,142 +3,80 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import {
-  DELIVERY_SIZES,
-  type DeliverySize,
-} from "@/components/console/size-picker";
 import { finalizeProvisionalEmail } from "@/lib/intake/finalize-provisional";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+import {
+  parseDeliveryDraft,
+  parseQuoteDraft,
+  saveDispatcherDraft,
+} from "./draft-input";
 import { canQueueInvite, CHECKOUT_INVITES_ENABLED } from "./invite";
 import { requireDispatcher } from "./require-dispatcher";
 import { loadOrderDetail } from "./review-queue";
 
 /**
- * The two things a dispatcher does to an order before it can be invited:
- * confirm the store, and price it.
- *
- * Both re-read what the form claims rather than trusting it — the store must
- * belong to the order's retailer, and the money must parse. A server action can
- * be invoked directly, so a form field is not evidence of anything.
+ * Dispatcher edits are checked and audited in one database call. A server action
+ * can be invoked directly, so its form fields are never authorization evidence.
  */
-const MAX_FEE_CENTS = 100_000_00;
-
-function parseSize(value: FormDataEntryValue | null): DeliverySize | null {
-  const raw = typeof value === "string" ? value.trim().toLowerCase() : "";
-  return (DELIVERY_SIZES as readonly string[]).includes(raw)
-    ? (raw as DeliverySize)
-    : null;
-}
-
-/** Dollars from the form to integer cents, which is how every money column is stored. */
-function parseCents(value: FormDataEntryValue | null): number | null {
-  const raw =
-    typeof value === "string" ? value.trim().replace(/[$,]/g, "") : "";
-  if (raw === "") return 0;
-
-  const amount = Number(raw);
-  if (!Number.isFinite(amount) || amount < 0) return null;
-
-  const cents = Math.round(amount * 100);
-  return cents > MAX_FEE_CENTS ? null : cents;
+function finishDraftUpdate(
+  orderId: string,
+  kind: "store" | "delivery" | "quote",
+  outcome: "saved" | "invalid" | "error",
+): never {
+  const path = `/dispatch/review/${orderId}`;
+  if (outcome === "saved") {
+    revalidatePath(path);
+    revalidatePath("/dispatch/review");
+  }
+  redirect(`${path}?draft=${kind}-${outcome}`);
 }
 
 export async function updateOrderStore(formData: FormData): Promise<void> {
   const { supabase } = await requireDispatcher();
-
   const orderId = String(formData.get("orderId") ?? "");
+  if (!/^[0-9a-f-]{36}$/i.test(orderId)) return;
   const storeId = String(formData.get("storeId") ?? "");
-  if (!orderId || !storeId) return;
+  if (!storeId) finishDraftUpdate(orderId, "store", "invalid");
 
-  const { data: orderData } = await supabase
-    .from("orders")
-    .select("retailer")
-    .eq("id", orderId)
-    .maybeSingle();
-
-  const order = orderData as { retailer: string } | null;
-  if (!order) return;
-
-  const { data: storeData } = await supabase
-    .from("retailer_stores")
-    .select("id, retailer, active")
-    .eq("id", storeId)
-    .maybeSingle();
-
-  const store = storeData as {
-    id: string;
-    retailer: string;
-    active: boolean;
-  } | null;
-
-  // The store has to belong to the same retailer as the cart. Switching a
-  // Home Depot cart to a Lowe's store would send a driver somewhere the cart
-  // cannot be bought.
-  if (!store || !store.active || store.retailer !== order.retailer) return;
-
-  await supabase
-    .from("orders")
-    .update({ retailer_store_id: storeId })
-    .eq("id", orderId);
-
-  revalidatePath(`/dispatch/review/${orderId}`);
-  revalidatePath("/dispatch/review");
+  // A store belongs to this order only when its retailer matches; the RPC
+  // validates that association again under the dispatcher's own RLS session.
+  const saved = await saveDispatcherDraft(supabase, orderId, "store", {
+    storeId,
+  });
+  finishDraftUpdate(orderId, "store", saved ? "saved" : "error");
 }
 
 export async function updateOrderQuote(formData: FormData): Promise<void> {
   const { supabase } = await requireDispatcher();
-
   const orderId = String(formData.get("orderId") ?? "");
-  if (!orderId) return;
+  if (!/^[0-9a-f-]{36}$/i.test(orderId)) return;
+  const draft = parseQuoteDraft(formData);
+  if (!draft.ok) finishDraftUpdate(orderId, "quote", "invalid");
 
-  const deliverySize = parseSize(formData.get("deliverySize"));
-  const materialsCents = parseCents(formData.get("materials"));
-  const sizingCents = parseCents(formData.get("sizing"));
-  const mileageCents = parseCents(formData.get("mileage"));
+  const saved = await saveDispatcherDraft(
+    supabase,
+    orderId,
+    "quote",
+    draft.value,
+  );
+  finishDraftUpdate(orderId, "quote", saved ? "saved" : "error");
+}
 
-  if (
-    materialsCents === null ||
-    sizingCents === null ||
-    mileageCents === null
-  ) {
-    // An unparseable amount is a bug or an attack, not a dispatcher mistake.
-    // Leave the order untouched rather than writing a garbage total.
-    return;
-  }
+export async function updateOrderDelivery(formData: FormData): Promise<void> {
+  const { supabase } = await requireDispatcher();
+  const orderId = String(formData.get("orderId") ?? "");
+  if (!/^[0-9a-f-]{36}$/i.test(orderId)) return;
+  const draft = parseDeliveryDraft(formData);
+  if (!draft.ok) finishDraftUpdate(orderId, "delivery", "invalid");
 
-  const { data: orderData } = await supabase
-    .from("orders")
-    .select("tax_cents, discount_cents")
-    .eq("id", orderId)
-    .maybeSingle();
-
-  const order = orderData as {
-    tax_cents: number;
-    discount_cents: number;
-  } | null;
-  if (!order) return;
-
-  const totalCents =
-    materialsCents +
-    sizingCents +
-    mileageCents +
-    order.tax_cents -
-    order.discount_cents;
-
-  await supabase
-    .from("orders")
-    .update({
-      delivery_size: deliverySize,
-      materials_subtotal_cents: materialsCents,
-      sizing_fee_cents: sizingCents,
-      mileage_fee_cents: mileageCents,
-      total_cents: Math.max(0, totalCents),
-    })
-    .eq("id", orderId);
-
-  revalidatePath(`/dispatch/review/${orderId}`);
-  revalidatePath("/dispatch/review");
+  const saved = await saveDispatcherDraft(
+    supabase,
+    orderId,
+    "delivery",
+    draft.value,
+  );
+  finishDraftUpdate(orderId, "delivery", saved ? "saved" : "error");
 }
 
 /**

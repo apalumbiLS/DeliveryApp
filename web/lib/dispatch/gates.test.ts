@@ -10,6 +10,7 @@ function input(overrides: Partial<GateInput> = {}): GateInput {
     storeMiles: 1.8,
     nearestMiles: 1.8,
     hasDeliveryAddress: true,
+    hasSiteContact: true,
     deliverySize: "pickup",
     materialsCents: 15_974,
     totalCents: 18_474,
@@ -65,12 +66,19 @@ describe("computeGates", () => {
     expect(stateOf(gates, "store")).toBe("pass");
   });
 
-  test("fails the address when the customer captured none", () => {
+  test("asks the dispatcher for the missing delivery address", () => {
     const gates = computeGates(input({ hasDeliveryAddress: false }));
 
-    // `fail` rather than `todo`: the dispatcher cannot conjure an address, and
-    // the detail says where it comes from.
-    expect(stateOf(gates, "address")).toBe("fail");
+    expect(stateOf(gates, "address")).toBe("todo");
+    expect(gates.find((gate) => gate.key === "address")?.detail).toContain(
+      "enter the delivery address",
+    );
+    expect(blockingGate(gates)?.key).toBe("address");
+  });
+
+  test("requires a site contact even when the address is present", () => {
+    const gates = computeGates(input({ hasSiteContact: false }));
+    expect(stateOf(gates, "address")).toBe("todo");
     expect(blockingGate(gates)?.key).toBe("address");
   });
 
@@ -90,6 +98,19 @@ describe("computeGates", () => {
     expect(gates.find((gate) => gate.key === "price")?.detail).toContain(
       "materials cost",
     );
+  });
+
+  test("fees cannot make missing materials look priced", () => {
+    const gates = computeGates(input({ materialsCents: 0, totalCents: 2500 }));
+    expect(stateOf(gates, "price")).toBe("todo");
+    expect(gates.find((gate) => gate.key === "price")?.detail).toContain(
+      "materials cost",
+    );
+  });
+
+  test("a positive total cannot make a missing size look ready", () => {
+    const gates = computeGates(input({ deliverySize: null, totalCents: 2500 }));
+    expect(stateOf(gates, "price")).toBe("todo");
   });
 
   test("does not block on distance when either side has no coordinates", () => {

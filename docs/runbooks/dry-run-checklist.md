@@ -2,7 +2,7 @@
 
 Rehearsing the new process before it touches a real customer.
 
-> **Status:** The stages below are a **future end-to-end delivery rehearsal**, not the current client pilot. For this phase, validate a signed Lowe's form (using mocks), provisional review, explicit dispatcher approval, and no automatic checkout/dispatch. The user applied `0009` and witnessed a real Lowe's mail-to-approval flow; the optional `delivery+<token>` flow and migration `0010` are not yet verified. See [05-email-intake](../architecture/05-email-intake.md).
+> **Status:** The stages below are a **future end-to-end delivery rehearsal**, not the current client pilot. For this phase, validate a signed Lowe's form (using mocks), provisional review, explicit dispatcher approval, and no automatic checkout/dispatch. The user applied `0009` and witnessed a real Lowe's mail-to-approval flow; the optional `delivery+<token>` flow and migration `0010` were also tested through manual approval. Dispatcher draft edits from migration `0011` still need review/application. See [05-email-intake](../architecture/05-email-intake.md).
 >
 > The source material calls for "a rehearsal, an onboarding with the Mitchells, and a first live with the Mitchells." This is that sequence.
 

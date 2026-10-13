@@ -11,7 +11,7 @@ Establish the full system architecture, data model, and phased build plan for a 
 
 Build the systems needed for a construction-site delivery MVP: a Next.js app (three role-guarded UIs) on Supabase, with a Mailgun-driven email-cart intake that parses **Lowe's** share-cart emails into structured orders, a dispatcher console that drives the order through a guarded state machine, a driver job board with first-accept-wins dispatch, and Stripe Payment Links for collection.
 
-This document describes the longer-term product roadmap, **not the set of features already live**. The current prototype milestone is narrower: a customer shares a Lowe's cart to a company-specific Mailgun address without needing the portal; the app parses it into dispatcher review, where a person supplies missing site/store/price details. The portal's pre-cart flow is optional. Customer checkout invitations, outbound mail, automated dispatch and payments are **not enabled**. [05-email-intake](05-email-intake.md) documents the current receiving setup and outstanding hardening.
+This document describes the longer-term product roadmap, **not the set of features already live**. The current prototype milestone is narrower: a customer shares a Lowe's cart to a shared Mailgun address or an optional one-use portal address; the app parses it into dispatcher review, where a person supplies or confirms missing site/store/price details. The portal's pre-cart flow is optional. Customer checkout invitations, outbound mail, automated dispatch and payments are **not enabled**. [05-email-intake](05-email-intake.md) documents the current receiving setup and outstanding hardening.
 
 ---
 
@@ -318,7 +318,7 @@ Next.js/Bun and Supabase schema are scaffolded; the pilot has North Carolina Low
 
 ### Phase 2 — Email intake + parsing _(highest risk — deliberately early)_
 
-A real Lowe's cart reached the signed Mailgun webhook and provisional dispatcher review; the user manually approved it into an order using applied migration `0009`. The optional portal now generates `delivery+<token>` addresses, but migration `0010` and a live token-address test remain. Keep intake readiness off until migration `0010` and the `delivery+` Mailgun route are ready, then enable it only for a controlled portal-token test; Home Depot and AI fallback are deferred.
+A real Lowe's cart reached the signed Mailgun webhook and provisional dispatcher review; the user manually approved it into an order using applied migration `0009`. The optional portal's `delivery+<token>` address was also tested after the user applied `0010`: company and intended site/store transfer after approval. Phase 4B prepares dispatcher delivery/contact/store/pricing edits in migration `0011`; no checkout invitation or driver dispatch is enabled. Home Depot and AI fallback are deferred.
 
 ### Phase 3 — Dispatcher console
 

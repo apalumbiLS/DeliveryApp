@@ -7,7 +7,10 @@ import {
   approveInboundEmail,
   dismissInboundEmail,
 } from "@/lib/dispatch/actions";
-import { listInboundExceptions } from "@/lib/dispatch/review-queue";
+import {
+  listInboundExceptions,
+  loadInboundIntentPreview,
+} from "@/lib/dispatch/review-queue";
 import { requireDispatcher } from "@/lib/dispatch/require-dispatcher";
 import { ParsedCartSchema } from "@/lib/parsers";
 
@@ -75,6 +78,18 @@ export default async function InboundReviewPage({
       ? parsed.data
       : null;
   const companies = (rawCompanies ?? []) as { id: string; name: string }[];
+  const intent = await loadInboundIntentPreview(
+    supabase,
+    email.recipient,
+    process.env.ORDER_ALIAS_DOMAIN,
+  );
+  const companyId = email.company_id ?? intent?.companyId ?? null;
+  const intentMismatch = Boolean(
+    email.company_id && intent && intent.companyId !== email.company_id,
+  );
+  const companyName = companies.find(
+    (company) => company.id === companyId,
+  )?.name;
 
   return (
     <div className="flex min-h-full">
@@ -101,6 +116,28 @@ export default async function InboundReviewPage({
           <p>From: {email.sender_email}</p>
           <p>To: {email.recipient}</p>
           <p>Subject: {email.subject ?? "(none)"}</p>
+          <p>
+            Matched company: {companyName ?? "Unattributed — confirm below"}
+          </p>
+          {intentMismatch ? (
+            <p className="text-danger-ink">
+              Token and inbound company disagree. Do not approve.
+            </p>
+          ) : null}
+          {cart?.requesterEmail ? (
+            <p>Cart requester (unverified): {cart.requesterEmail}</p>
+          ) : null}
+          {intent?.eligible ? (
+            <p>
+              Portal intent: {intent.site ?? intent.address ?? "Site not named"}
+              {" · "}Lowe&apos;s store: {intent.store ?? "Store unavailable"}
+            </p>
+          ) : intent ? (
+            <p>
+              This one-use address has already been used; no site or store will
+              be reused.
+            </p>
+          ) : null}
           <p className="mt-2 font-medium text-warning-ink">
             {email.review_reason ?? "Awaiting processing"}
           </p>
@@ -141,8 +178,8 @@ export default async function InboundReviewPage({
         <div className="flex flex-wrap gap-3">
           <form action={approveInboundEmail} className="flex items-end gap-2">
             <input type="hidden" name="inboundId" value={inboundId} />
-            {email.company_id ? (
-              <input type="hidden" name="companyId" value={email.company_id} />
+            {companyId ? (
+              <input type="hidden" name="companyId" value={companyId} />
             ) : (
               <label className="text-[12px] text-ink">
                 Confirm company
@@ -162,7 +199,11 @@ export default async function InboundReviewPage({
             )}
             <Button
               type="submit"
-              disabled={!cart || (!email.company_id && companies.length === 0)}
+              disabled={
+                !cart ||
+                intentMismatch ||
+                (!companyId && companies.length === 0)
+              }
             >
               Approve and create order
             </Button>

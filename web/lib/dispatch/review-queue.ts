@@ -12,8 +12,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { distanceMiles, type Point } from "@/lib/geo";
+import { resolveRecipient } from "@/lib/intake/resolve-recipient";
 import { isRetailerId, RETAILERS } from "@/lib/retailers";
 
+import { deliveryFields } from "./draft-input";
 import { computeGates, type Gate } from "./gates";
 
 /** How many alternatives to offer when the chosen store looks wrong. */
@@ -85,6 +87,7 @@ export type OrderDetail = {
     label: string | null;
     address: string | null;
     instructions: string | null;
+    fields: ReturnType<typeof deliveryFields>;
   };
   /**
    * Who the checkout invite would go to, or null when we have no address for
@@ -95,6 +98,7 @@ export type OrderDetail = {
   /** True once an invite is sitting in the outbox. Nothing sends it yet. */
   inviteQueued: boolean;
   store: StoreOption | null;
+  storeOptions: StoreOption[];
   alternatives: StoreOption[];
   gates: Gate[];
 };
@@ -288,7 +292,11 @@ export async function loadOrderDetail(
     ? await loadParseAttempt(supabase, order.inbound_email_id)
     : null;
 
-  const { chosen, alternatives } = await loadStores(
+  const {
+    chosen,
+    alternatives,
+    options: storeOptions,
+  } = await loadStores(
     supabase,
     order.retailer,
     order.retailer_store_id,
@@ -325,13 +333,20 @@ export async function loadOrderDetail(
     null,
   );
 
+  const fields = deliveryFields(
+    order.delivery_address,
+    order.delivery_instructions,
+  );
   const gates = computeGates({
     parseSucceeded: parse?.succeeded ?? items.length > 0,
     itemCount: items.length,
     storeName: chosen?.name ?? null,
     storeMiles: chosen?.miles ?? null,
     nearestMiles,
-    hasDeliveryAddress: Boolean(addressLines(order.delivery_address)),
+    hasDeliveryAddress: Boolean(
+      fields.line1 && fields.city && fields.state && fields.postalCode,
+    ),
+    hasSiteContact: Boolean(fields.contactName && fields.contactPhone),
     deliverySize: order.delivery_size,
     materialsCents: order.materials_subtotal_cents,
     totalCents: order.total_cents,
@@ -369,6 +384,7 @@ export async function loadOrderDetail(
       label: site?.label ?? null,
       address: addressLines(order.delivery_address),
       instructions: order.delivery_instructions,
+      fields,
     },
     // The person who shared the cart is the one waiting on an answer, and their
     // address is the only one we know is live for this customer — the portal
@@ -377,6 +393,7 @@ export async function loadOrderDetail(
     inviteRecipient: order.requester_email ?? company?.billing_email ?? null,
     inviteQueued: inviteResult.data !== null,
     store: chosen,
+    storeOptions,
     alternatives,
     gates,
   };
@@ -412,8 +429,8 @@ async function loadParseAttempt(
 }
 
 /**
- * The chosen store plus the nearest alternatives, all measured from the job
- * site.
+ * Every active store is selectable; the nearest alternatives are measured from
+ * the saved job site when it has coordinates.
  *
  * Distances are null when the site has no coordinates — a typed address gets a
  * ZIP centroid, and a ZIP outside the seeded area gets nothing. The screen says
@@ -424,12 +441,17 @@ async function loadStores(
   retailer: string,
   chosenId: string | null,
   sitePoint: Point | null,
-): Promise<{ chosen: StoreOption | null; alternatives: StoreOption[] }> {
-  const { data } = await supabase
+): Promise<{
+  chosen: StoreOption | null;
+  alternatives: StoreOption[];
+  options: StoreOption[];
+}> {
+  const { data, error } = await supabase
     .from("retailer_stores")
     .select("id, name, store_label, city, state, lat, lng")
     .eq("retailer", retailer)
     .eq("active", true);
+  if (error) throw new Error("Could not load retailer stores");
 
   const rows = (data ?? []) as {
     id: string;
@@ -455,18 +477,18 @@ async function loadStores(
 
   const chosen = options.find((option) => option.id === chosenId) ?? null;
 
+  options.sort((a, b) => {
+    if (a.miles === null && b.miles === null)
+      return a.name.localeCompare(b.name);
+    if (a.miles === null) return 1;
+    if (b.miles === null) return -1;
+    return a.miles - b.miles;
+  });
   const alternatives = options
     .filter((option) => option.id !== chosenId)
-    .sort((a, b) => {
-      if (a.miles === null && b.miles === null)
-        return a.name.localeCompare(b.name);
-      if (a.miles === null) return 1;
-      if (b.miles === null) return -1;
-      return a.miles - b.miles;
-    })
     .slice(0, ALTERNATIVES_SHOWN);
 
-  return { chosen, alternatives };
+  return { chosen, alternatives, options };
 }
 
 export type InboundException = {
@@ -530,4 +552,48 @@ export async function listInboundExceptions(
     companyName: row.company_id ? (names.get(row.company_id) ?? null) : null,
     receivedAt: row.received_at,
   }));
+}
+
+export async function loadInboundIntentPreview(
+  supabase: SupabaseClient,
+  recipient: string,
+  domain: string | undefined,
+) {
+  const resolution = await resolveRecipient(supabase, recipient, domain);
+  if (resolution.kind !== "intent") return null;
+  const intent = resolution.intent;
+  if (intent.status !== "open" || intent.retailer !== "lowes") {
+    return {
+      companyId: resolution.companyId,
+      eligible: false,
+      store: null,
+      site: null,
+      address: null,
+    };
+  }
+  const [storeResult, siteResult] = await Promise.all([
+    intent.retailer_store_id
+      ? supabase
+          .from("retailer_stores")
+          .select("name")
+          .eq("id", intent.retailer_store_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+    intent.site_id
+      ? supabase
+          .from("company_sites")
+          .select("label")
+          .eq("id", intent.site_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+  ]);
+  if (storeResult.error || siteResult.error)
+    throw new Error("Could not load saved intent details");
+  return {
+    companyId: resolution.companyId,
+    eligible: true,
+    store: (storeResult.data as { name: string } | null)?.name ?? null,
+    site: (siteResult.data as { label: string | null } | null)?.label ?? null,
+    address: addressLines(intent.delivery_address),
+  };
 }

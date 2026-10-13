@@ -194,7 +194,7 @@ Without versioning, "parsing broke last Tuesday" is unanswerable.
 
 ## Known unknowns
 
-1. **One Lowe's sample.** It is a 3-item cart, which confirms multi-row parsing — but it is a single artifact. A second cart, ideally with a different item count, would strengthen the evidence considerably.
+1. **One full Lowe's `.eml` plus a redacted structural excerpt from a second pilot cart.** Both exercise three lines and unknown prices; the excerpt is not a full Mailgun form capture. A different item count and additional full, sanitized templates would strengthen drift detection. This improves parsing confidence, not retailer authentication.
 2. **No prices means no arithmetic check.** See [the honest weakness](#the-honest-weakness) above. Structural checks plus the duplicate guard plus the review queue are the whole defence.
 3. **Home Depot's multi-item structure was never observed.** Both samples hold exactly one item, so its row repetition is inferred. Moot while Home Depot is deferred, but it must be re-established rather than assumed if that parser is built.
 
