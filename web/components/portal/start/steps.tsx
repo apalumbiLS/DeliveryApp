@@ -499,6 +499,13 @@ export function BuildShareStep({
         </>
       )}
 
+      {alias ? (
+        <p className="mt-2 text-[11.5px] leading-relaxed text-ink-muted">
+          This address is for this cart. Sharing a different cart to it starts a
+          new request without reusing this job site or store.
+        </p>
+      ) : null}
+
       <figure className="mt-3">
         <div className="flex h-40 items-center justify-center gap-2 rounded-field border border-dashed border-hairline bg-sunken/60 text-ink-faint">
           <ImageIcon className="h-4 w-4" />

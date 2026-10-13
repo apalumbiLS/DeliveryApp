@@ -88,7 +88,7 @@ The construction company. Owns the inbound email alias and the portal login.
 | `notes`         | text                          |                                                                                          |
 | `active`        | boolean NOT NULL DEFAULT true |                                                                                          |
 
-`order_alias` is `citext` and unique because it is the **sole** order-attribution mechanism. Email local parts are case-insensitive in practice, and a collision would route one company's orders to another.
+`order_alias` is `citext` and unique for stable company addresses. Optional portal-generated addresses use `order_intents.email_token` instead. Migration `0008` reserves the `cart-` local-part prefix so a company alias cannot masquerade as an intent. The receiving domain must also match the configured domain before attribution.
 
 ### `profiles`
 
@@ -285,6 +285,7 @@ A draft captured by the portal's start-an-order flow: the site, retailer, and st
 | `delivery_address`          | jsonb                                       | Snapshot; set even for a new address, so the intent stands alone |
 | `retailer`                  | retailer NOT NULL                           |                                                             |
 | `retailer_store_id`         | uuid FK → retailer_stores                   |                                                             |
+| `email_token`               | text UNIQUE, nullable                      | Migration `0008`: 32 lowercase hex characters; routed via `cart-<token>@<configured-domain>` |
 | `status`                    | order_intent_status NOT NULL DEFAULT 'open' | Only `open` is written by the portal                        |
 | `order_id`                  | uuid FK → orders                            | Set when a cart email is matched to this intent             |
 | `matched_at`                | timestamptz                                 |                                                             |
@@ -292,7 +293,7 @@ A draft captured by the portal's start-an-order flow: the site, retailer, and st
 
 `delivery_address` is a snapshot rather than a read-through to `site_id` for two reasons: a customer can type an address that is not yet a saved site, and a saved site can be edited later. The intent records what was agreed, not what the site happens to say today.
 
-`matched` and `expired` are not written yet — matching an arriving cart to its intent belongs to the email-intake work, and the sweep over abandoned intents is deferred (see [12-deferred-and-extension-points](12-deferred-and-extension-points.md)).
+The inbound processor conditionally sets `matched` for the first successfully parsed eligible email received at this token; a failed parse does not consume the intent. It never chooses the company's newest intent for a stable-alias email. A second distinct message to the used token belongs to the same company but receives no old site/store. Expiry sweeps remain deferred; the token remains a routing identifier for its company. The current intake writes are **not yet atomic** — do not rely on them for real Mailgun delivery until the next phase. See [12-deferred-and-extension-points](12-deferred-and-extension-points.md).
 
 ### `job_declines`
 
@@ -386,6 +387,7 @@ Beyond primary and foreign keys:
 | `order_intents`       | (`company_id`, `created_at` desc)       | A company's own intents          |
 | `order_intents`       | (`status`, `created_at`)                | Sweep over abandoned intents     |
 | `order_intents`       | unique (`order_id`)                     | One intent per order             |
+| `order_intents`       | unique (`email_token`)                  | One opaque receiving token per optional portal intent; migration `0008` |
 | `notifications`       | unique (`dedupe_key`)                   | Send idempotency                 |
 | `notifications`       | (`status`, `created_at`)                | Outbox drain                     |
 | `parse_attempts`      | (`inbound_email_id`, `created_at`)      | Parse diagnostics                |

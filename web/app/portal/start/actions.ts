@@ -1,6 +1,9 @@
 "use server";
 
+import { randomBytes } from "node:crypto";
+
 import { normalizeZip } from "@/lib/geo";
+import { intentOrderAddress } from "@/lib/mailgun/config";
 import { requireCustomer } from "@/lib/portal/require-customer";
 import { isRetailerId } from "@/lib/retailers";
 
@@ -21,7 +24,8 @@ export type IntentInput = {
 };
 
 export type SaveIntentResult =
-  { ok: true; intentId: string } | { ok: false; error: string };
+  | { ok: true; intentId: string; orderAddress: string }
+  | { ok: false; error: string };
 
 type StoreRow = { id: string; retailer: string; active: boolean };
 
@@ -52,6 +56,12 @@ export async function saveOrderIntent(
 
   if (!isRetailerId(input.retailer)) {
     return { ok: false, error: "Pick a retailer." };
+  }
+
+  const emailToken = randomBytes(16).toString("hex");
+  const orderAddress = intentOrderAddress(emailToken);
+  if (!orderAddress) {
+    return { ok: false, error: "Cart email intake is not ready yet." };
   }
 
   const storeId = String(input.storeId ?? "");
@@ -184,6 +194,7 @@ export async function saveOrderIntent(
       delivery_address: address,
       retailer: input.retailer,
       retailer_store_id: storeId,
+      email_token: emailToken,
     })
     .select("id")
     .single();
@@ -197,7 +208,11 @@ export async function saveOrderIntent(
     };
   }
 
-  return { ok: true, intentId: (intent as unknown as { id: string }).id };
+  return {
+    ok: true,
+    intentId: (intent as unknown as { id: string }).id,
+    orderAddress,
+  };
 }
 
 export type ZipCentroid = { lat: number; lng: number };

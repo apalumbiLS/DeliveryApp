@@ -2,7 +2,7 @@
 
 A customer builds a Lowe's cart and uses Lowe's **Share Cart** to send it to their company's address on the prototype Mailgun receiving domain. The application parses it into dispatcher work. A portal visit is **optional**.
 
-> **Status:** The parser and signed webhook exist, but the temporary domain's receiving MX and a real Mailgun → Vercel delivery have **not been verified**. Do not represent the address as live until the operator has confirmed the receiving path and set `ORDER_INTAKE_READY=true`. One-use portal addresses, atomic persistence and inbound exception handling are later review phases; this document distinguishes today's code from that target.
+> **Status:** The parser, signed webhook and one-use portal address code exist; migration `0008_intent_mail_tokens.sql` still requires your review/application. The temporary domain's receiving MX and a real Mailgun → Vercel delivery are **not verified**. Keep `ORDER_INTAKE_READY=false` until atomic persistence, trusted/provisional sender handling, exception review and a real end-to-end test are complete.
 
 ## The critical detail: the sender is the retailer, not the customer
 
@@ -11,7 +11,7 @@ The captured Lowe's message has a generic subject and `From: Lowe’s Home Impro
 ## Addressing and prerequisites
 
 - **Email-only entry:** the pilot company retains its existing `companies.order_alias` local part (`things.dispatch+acme-construction`). Its customer-facing address is `<company.order_alias>@<ORDER_ALIAS_DOMAIN>`. It is a **Mailgun-domain** address, not the old `@gmail.com` inbox. You may give it to the customer without requiring portal login.
-- **Optional portal (next phase):** generate `cart-<opaque random token>@<ORDER_ALIAS_DOMAIN>` for each `order_intents` row. The first eligible distinct email claims that intent's store and delivery site. A later *different* email to the same token is a new company order **without** the old site/store. Sending to the stable company alias never auto-matches the most recent intent.
+- **Optional portal (code implemented; migration pending):** each newly created `order_intents` row receives a cryptographically random 128-bit `email_token`. After the customer chooses site and Lowe's store, the portal displays `cart-<32-lowercase-hex>@<ORDER_ALIAS_DOMAIN>` for that intent. The first **successfully parsed eligible** distinct email claims its site and store; an unreadable cart does not consume the intent. A retry of the *same* email remains one order. A later different email to the used address resolves to the same company but is a **new order without the old site/store**. Sending to the stable company alias **never auto-matches** an open intent. If the customer changes a choice after getting an address, the flow creates another intent/address; the old address stays associated with the old choices until used.
 - **The prototype domain is already verified for ownership, but its receiving MX is not yet confirmed.** In the user's Mailgun account, configure MX using the exact records provided by Mailgun for that domain, confirm inbound delivery, then the route and Vercel destination. `ORDER_INTAKE_READY=true` is an **operator confirmation**, not an automated DNS probe. `MAILGUN_SIGNING_KEY` is the HTTP webhook signing key, never the Mailgun API key.
 - **Stable HTTPS URL:** Mailgun must reach the Vercel deployment from the public internet. Check Vercel deployment protection: a protected preview can reject provider POSTs before the Next.js route runs. Use a stable, reachable endpoint; if a preview bypass is required, manage its secret out of the repo.
 
@@ -37,8 +37,8 @@ Do not point a second Mailgun route at the same recipient and handler without co
 |---|---|---|
 | Endpoint | `POST /api/webhooks/mailgun/inbound`, `web/app/api/webhooks/mailgun/inbound/route.ts` | Capture and test a **real** Mailgun form payload, not just a Gmail-exported `.eml` |
 | Signature | HMAC-SHA256 of timestamp + token using `MAILGUN_SIGNING_KEY`; 406 on mismatch | Verify current account key and retry/timestamp behavior. Never log the key, token or raw body |
-| Recipient | `lib/intake/process-inbound-email.ts` currently looks up the local part in `companies.order_alias` | Validate the recipient **domain** and use the current/legacy account's correct key; implement opaque intent tokens |
-| Idempotency | Uses the email's `Message-ID` (legacy column name `mailgun_message_id`) or a content hash | Include recipient so the same Message-ID addressed to two companies does not suppress one of them; atomically handle retries |
+| Recipient | `lib/intake/resolve-recipient.ts` validates the full address's configured domain. Exact stable company alias resolves the company only; a known `cart-<token>` resolves its owner and an eligible unused intent. Unknown token/domain has no order | Pair current/legacy account keys with the respective domains during the later account handoff; do not infer company from an unrecognized address |
+| Idempotency | The legacy-named `mailgun_message_id` column now holds SHA-256 of **normalized recipient + Message-ID** (or recipient + message content when Message-ID is absent) | The whole intake must become atomic; current separate writes can strand a partial order on failure |
 | Retailer authenticity | Checks only for a `DKIM-Signature d=` header | Presence is **forgeable**, not verified authentication. Quarantine uncertain messages visibly; validate provider evidence with a real signed capture |
 | Persistence | Records inbound email, attempt, order, items, intent and state in separate calls | Check every write and finalize related records transactionally so retries cannot strand half-orders |
 | Customer email | No actual sending or checkout destination exists | **No automatic customer email or driver dispatch** in this intake milestone |
@@ -77,7 +77,7 @@ Lowe's does not state a materials price, so **zero in the current schema means u
 
 ## Idempotency and intent matching
 
-Mailgun retries and can redeliver. One `Message-ID` + **normalized envelope recipient** identifies a delivered message; absent Message-ID, use a documented stable recipient + content fingerprint. A retry of the same message must not create a second order. Two different messages to one consumed intent token must create distinct orders, with only the first eligible message carrying the intent's site/store. Never fall back to the company's "latest open" intent for mail sent directly to its stable alias. All order/items/intent-status/event writes should commit together, not claim success after partial Supabase writes.
+Mailgun retries and can redeliver. The inbox's unique key is SHA-256 of `normalized envelope recipient + Message-ID` (or recipient + sender/subject/body fingerprint without Message-ID). A retry of the same message produces one order; the same Message-ID delivered to **different** company addresses is not suppressed. Two different messages to one consumed token create distinct orders, and only the first eligible one carries the intent's site/store. An expired or retailer-mismatched intent still identifies its company but **does not** donate site/store. Never fall back to the company's "latest open" intent for stable-alias mail. Existing order, items, token claim and inbound status are still separate writes; the next phase must make them atomic before live pilot intake.
 
 ## Sender authenticity and unknown aliases
 

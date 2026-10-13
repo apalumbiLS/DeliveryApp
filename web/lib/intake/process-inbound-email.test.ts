@@ -14,6 +14,7 @@ import {
   processInboundEmail,
   type InboundEmailInput,
 } from "./process-inbound-email";
+import { inboundDedupeKey } from "./resolve-recipient";
 
 /**
  * These exercise the pipeline's **branching** against a fake client, not the
@@ -23,6 +24,8 @@ import {
 
 const fixture = readEmlFixture("lowes/multi-item.eml");
 const ALIAS = "things.dispatch+acme-construction";
+const DOMAIN = "orders.example.com";
+const EMAIL_TOKEN = "a".repeat(32);
 
 const MESSAGE_ID = firstHeader(
   parseMessageHeaders(JSON.stringify(fixture.headers)),
@@ -35,7 +38,7 @@ function inbound(
   overrides: Partial<InboundEmailInput> = {},
 ): InboundEmailInput {
   return {
-    recipient: `${ALIAS}@orders.example.com`,
+    recipient: `${ALIAS}@${DOMAIN}`,
     sender: fixture.senderEmail,
     subject: fixture.subject,
     bodyHtml: fixture.bodyHtml,
@@ -52,10 +55,34 @@ function withCompany(): FakeDatabase {
   return db;
 }
 
+function withIntent(db: FakeDatabase, status = "open", retailer = "lowes") {
+  db.order_intents.push({
+    id: "intent-1",
+    company_id: "company-1",
+    email_token: EMAIL_TOKEN,
+    status,
+    retailer,
+    retailer_store_id: "store-9",
+    site_id: "site-9",
+    delivery_address: { line1: "421 Commerce Rd" },
+  });
+}
+
+function withMessageId(id: string): Partial<InboundEmailInput> {
+  return {
+    messageHeadersRaw: JSON.stringify(
+      fixture.headers.map(([name, value]) =>
+        name.toLowerCase() === "message-id" ? [name, id] : [name, value],
+      ),
+    ),
+  };
+}
+
 function run(db: FakeDatabase, input: InboundEmailInput = inbound()) {
   return processInboundEmail(
     fakeSupabase(db) as unknown as SupabaseClient,
     input,
+    DOMAIN,
   );
 }
 
@@ -121,9 +148,16 @@ describe("processInboundEmail", () => {
 
     // A previous attempt recorded the email and then died — exactly what a
     // Mailgun retry is for, and why a duplicate must not be a blanket no-op.
+    const mail = inbound();
     db.inbound_emails.push({
       id: "inbound-1",
-      mailgun_message_id: MESSAGE_ID,
+      mailgun_message_id: inboundDedupeKey(
+        mail.recipient,
+        MESSAGE_ID,
+        mail.sender,
+        mail.subject,
+        mail.bodyHtml,
+      ),
       processing_status: "pending",
     });
 
@@ -187,17 +221,12 @@ describe("processInboundEmail", () => {
 
   test("takes the store and address from the customer's open intent", async () => {
     const db = withCompany();
-    db.order_intents.push({
-      id: "intent-1",
-      company_id: "company-1",
-      status: "open",
-      created_at: "2026-10-01T00:00:00.000Z",
-      retailer_store_id: "store-9",
-      site_id: "site-9",
-      delivery_address: { line1: "421 Commerce Rd" },
-    });
+    withIntent(db);
 
-    const result = await run(db);
+    const result = await run(
+      db,
+      inbound({ recipient: `cart-${EMAIL_TOKEN}@${DOMAIN}` }),
+    );
 
     expect(result.status).toBe("parsed");
     expect(db.orders[0].retailer_store_id).toBe("store-9");
@@ -232,5 +261,143 @@ describe("processInboundEmail", () => {
     expect(db.order_items).toHaveLength(0);
     expect(db.parse_attempts[0].succeeded).toBe(false);
     expect(db.inbound_emails[0].processing_status).toBe("needs_review");
+  });
+
+  test("stable company mail never takes even the newest open intent", async () => {
+    const db = withCompany();
+    withIntent(db);
+    const result = await run(db);
+
+    expect(result.status).toBe("parsed");
+    expect(db.orders[0].retailer_store_id ?? null).toBeNull();
+    expect(db.orders[0].delivery_address ?? null).toBeNull();
+    expect(db.order_intents[0].status).toBe("open");
+  });
+
+  test("an intent address selects its own site, not a newer intent", async () => {
+    const db = withCompany();
+    withIntent(db);
+    db.order_intents.push({
+      id: "intent-2",
+      company_id: "company-1",
+      email_token: "b".repeat(32),
+      status: "open",
+      retailer: "lowes",
+      retailer_store_id: "other-store",
+      delivery_address: { line1: "Other job site" },
+    });
+
+    await run(db, inbound({ recipient: `cart-${EMAIL_TOKEN}@${DOMAIN}` }));
+
+    expect(db.orders[0].retailer_store_id).toBe("store-9");
+    expect(db.order_intents[0].status).toBe("matched");
+    expect(db.order_intents[1].status).toBe("open");
+  });
+
+  test("an unreadable cart does not consume a one-use intent", async () => {
+    const db = withCompany();
+    withIntent(db);
+    const recipient = `cart-${EMAIL_TOKEN}@${DOMAIN}`;
+
+    const failed = await run(
+      db,
+      inbound({ recipient, bodyHtml: "<html>No cart items</html>" }),
+    );
+    const valid = await run(
+      db,
+      inbound({ recipient, ...withMessageId("<valid@lowes.com>") }),
+    );
+
+    expect(failed.status).toBe("needs_review");
+    expect(valid.status).toBe("parsed");
+    expect(db.orders[0].retailer_store_id ?? null).toBeNull();
+    expect(db.orders[1].retailer_store_id).toBe("store-9");
+    expect(db.order_intents[0].order_id).toBe(db.orders[1].id);
+  });
+
+  test("a retry to an intent address remains the same order", async () => {
+    const db = withCompany();
+    withIntent(db);
+    const mail = inbound({ recipient: `cart-${EMAIL_TOKEN}@${DOMAIN}` });
+    await run(db, mail);
+    const retry = await run(db, mail);
+
+    expect(retry.status).toBe("duplicate");
+    expect(db.orders).toHaveLength(1);
+    expect(db.order_intents[0].order_id).toBe(db.orders[0].id);
+  });
+
+  test("another distinct email to a consumed token inherits company only", async () => {
+    const db = withCompany();
+    withIntent(db);
+    const recipient = `cart-${EMAIL_TOKEN}@${DOMAIN}`;
+    await run(db, inbound({ recipient }));
+    const next = await run(
+      db,
+      inbound({ recipient, ...withMessageId("<another@lowes.com>") }),
+    );
+
+    expect(next.status).toBe("parsed");
+    expect(next.detail).toContain("collect site and store");
+    expect(db.orders).toHaveLength(2);
+    expect(db.orders[1].company_id).toBe("company-1");
+    expect(db.orders[1].retailer_store_id ?? null).toBeNull();
+    expect(db.orders[1].delivery_address ?? null).toBeNull();
+    expect(db.order_intents[0].order_id).toBe(db.orders[0].id);
+  });
+
+  test("an expired or retailer-mismatched token never supplies a site", async () => {
+    for (const [status, retailer] of [
+      ["expired", "lowes"],
+      ["open", "homedepot"],
+    ]) {
+      const db = withCompany();
+      withIntent(db, status, retailer);
+      const result = await run(
+        db,
+        inbound({ recipient: `cart-${EMAIL_TOKEN}@${DOMAIN}` }),
+      );
+      expect(result.status).toBe("parsed");
+      expect(db.orders[0].company_id).toBe("company-1");
+      expect(db.orders[0].retailer_store_id ?? null).toBeNull();
+      expect(db.order_intents[0].order_id ?? null).toBeNull();
+    }
+  });
+
+  test("unknown tokens and domains create no operational order", async () => {
+    for (const recipient of [
+      `cart-${"b".repeat(32)}@${DOMAIN}`,
+      `${ALIAS}@gmail.com`,
+      `cart-${EMAIL_TOKEN}@notorders.example.com`,
+    ]) {
+      const db = withCompany();
+      withIntent(db);
+      const result = await run(db, inbound({ recipient }));
+      expect(result.status).toBe("unattributed");
+      expect(db.orders).toHaveLength(0);
+      expect(db.inbound_emails[0].processing_status).toBe("needs_review");
+    }
+  });
+
+  test("the same Message-ID at two company addresses creates two orders", async () => {
+    const db = withCompany();
+    db.companies.push({
+      id: "company-2",
+      order_alias: "things.dispatch+second-company",
+      active: true,
+    });
+    await run(db);
+    const second = await run(
+      db,
+      inbound({ recipient: `things.dispatch+second-company@${DOMAIN}` }),
+    );
+
+    expect(second.status).toBe("parsed");
+    expect(db.orders).toHaveLength(2);
+    expect(db.orders[1].company_id).toBe("company-2");
+    expect(db.inbound_emails).toHaveLength(2);
+    expect(db.inbound_emails[0].mailgun_message_id).not.toBe(
+      db.inbound_emails[1].mailgun_message_id,
+    );
   });
 });

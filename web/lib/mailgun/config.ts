@@ -60,8 +60,19 @@ export function companyOrderAddress(
   return alias &&
     alias.length <= 64 &&
     /^[a-z0-9][a-z0-9.+_-]*$/.test(alias) &&
+    !alias.startsWith("cart-") &&
     domain &&
     isInboundAddressReady(config)
     ? `${alias}@${domain}`
+    : null;
+}
+
+export function intentOrderAddress(
+  token: string,
+  config: InboundAddressConfig = inboundAddressConfig(),
+): string | null {
+  const domain = config.domain?.trim().toLowerCase();
+  return /^[0-9a-f]{32}$/.test(token) && domain && isInboundAddressReady(config)
+    ? `cart-${token}@${domain}`
     : null;
 }

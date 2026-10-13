@@ -20,8 +20,6 @@
  *   5. Parse, record the attempt, and create the order.
  */
 
-import { createHash } from "node:crypto";
-
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { isDomainOrSubdomainOf } from "@/lib/domain";
@@ -32,6 +30,11 @@ import {
   firstHeader,
   parseMessageHeaders,
 } from "./authenticity";
+import {
+  inboundDedupeKey,
+  parseInboundRecipient,
+  resolveRecipient,
+} from "./resolve-recipient";
 
 export type InboundEmailInput = {
   /** SMTP envelope recipient — the only field a customer cannot influence. */
@@ -70,34 +73,11 @@ type InboundProcessingStatus =
 /** `RESOLVED` statuses mean the email has already been dealt with. */
 const RESOLVED: InboundProcessingStatus[] = ["parsed", "needs_review", "ignored"];
 
-function aliasFrom(recipient: string): string | null {
-  const at = recipient.lastIndexOf("@");
-  if (at <= 0) return null;
-  return recipient.slice(0, at).trim().toLowerCase() || null;
-}
-
 /**
- * The email's own `Message-ID`.
- *
- * Mailgun's `forward()` payload carries no message id of its own — the
- * documented fields are signature, timestamp, token, subject, sender, from,
- * recipient, message-headers, and the bodies — so idempotency keys on the
- * header. It is stable across a retry and unique per email, which is exactly
- * what `inbound_emails.mailgun_message_id` needs.
- *
- * A message without one falls back to a hash of its content, which is also
- * stable across a redelivery.
+ * Record the inbound email's processing state after handling it. The
+ * `mailgun_message_id` column contains the hash of recipient + Message-ID,
+ * rather than an identifier supplied by Mailgun.
  */
-function idempotencyKey(
-  input: InboundEmailInput,
-  messageIdHeader: string | null,
-): string {
-  if (messageIdHeader) return messageIdHeader;
-
-  return createHash("sha256")
-    .update(`${input.recipient}\n${input.subject ?? ""}\n${input.bodyHtml}`)
-    .digest("hex");
-}
 
 async function setProcessingStatus(
   supabase: SupabaseClient,
@@ -113,10 +93,17 @@ async function setProcessingStatus(
 export async function processInboundEmail(
   supabase: SupabaseClient,
   input: InboundEmailInput,
+  domain: string | undefined = process.env.ORDER_ALIAS_DOMAIN,
 ): Promise<IntakeResult> {
   const headers = parseMessageHeaders(input.messageHeadersRaw);
-  const key = idempotencyKey(input, firstHeader(headers, "Message-ID"));
-  const recipientAlias = aliasFrom(input.recipient);
+  const key = inboundDedupeKey(
+    input.recipient,
+    firstHeader(headers, "Message-ID"),
+    input.sender,
+    input.subject,
+    input.bodyHtml,
+  );
+  const recipientAlias = parseInboundRecipient(input.recipient, domain);
 
   // ---------------------------------------------------------------------------
   // 1. Record the raw email, or recognise a redelivery.
@@ -178,26 +165,14 @@ export async function processInboundEmail(
   // ---------------------------------------------------------------------------
   // 2. Attribute to a company, from the recipient.
   // ---------------------------------------------------------------------------
-  if (!recipientAlias) {
-    await setProcessingStatus(supabase, inboundEmailId, "needs_review");
-    return { status: "unattributed", detail: "recipient has no local part" };
-  }
-
-  const { data: companyData } = await supabase
-    .from("companies")
-    .select("id")
-    .eq("order_alias", recipientAlias)
-    .eq("active", true)
-    .maybeSingle();
-
-  const company = companyData as { id: string } | null;
-
-  if (!company) {
+  const resolution = await resolveRecipient(supabase, input.recipient, domain);
+  if (resolution.kind === "unattributed") {
     // Deliberately not an auto-create: silently turning unverified inbound mail
     // into companies is how a spam flood becomes a customer database.
     await setProcessingStatus(supabase, inboundEmailId, "needs_review");
-    return { status: "unattributed", detail: recipientAlias };
+    return { status: "unattributed", detail: resolution.reason };
   }
+  const companyId = resolution.companyId;
 
   // ---------------------------------------------------------------------------
   // 3. Select a parser by sender domain.
@@ -258,31 +233,20 @@ export async function processInboundEmail(
   // 6. An order either way — `received` when it parsed, `needs_review` when it
   //    did not. The customer's cart is never silently dropped.
   // ---------------------------------------------------------------------------
-  const { data: intentData } = await supabase
-    .from("order_intents")
-    .select("id, retailer, retailer_store_id, site_id, delivery_address")
-    .eq("company_id", company.id)
-    .eq("status", "open")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  const intent = intentData as
-    | {
-        id: string;
-        retailer: string;
-        retailer_store_id: string | null;
-        site_id: string | null;
-        delivery_address: unknown;
-      }
-    | null;
+  const intent =
+    outcome.ok &&
+    resolution.kind === "intent" &&
+    resolution.intent.status === "open" &&
+    resolution.intent.retailer === parser.retailer
+      ? resolution.intent
+      : null;
 
   const cart = outcome.ok ? outcome.cart : null;
 
   const { data: orderData, error: orderError } = await supabase
     .from("orders")
     .insert({
-      company_id: company.id,
+      company_id: companyId,
       inbound_email_id: inboundEmailId,
       retailer: parser.retailer,
       status: outcome.ok ? "received" : "needs_review",
@@ -338,6 +302,8 @@ export async function processInboundEmail(
         matched_at: new Date().toISOString(),
       })
       .eq("id", intent.id)
+      .eq("company_id", companyId)
+      .eq("retailer", parser.retailer)
       .eq("status", "open")
       .select("id")
       .maybeSingle();
@@ -366,7 +332,15 @@ export async function processInboundEmail(
     .eq("id", inboundEmailId);
 
   return outcome.ok
-    ? { status: "parsed", orderId: order.id, orderNumber: order.order_number }
+    ? {
+        status: "parsed",
+        orderId: order.id,
+        orderNumber: order.order_number,
+        detail:
+          resolution.kind === "intent" && !intent
+            ? "One-use cart address is no longer eligible; collect site and store"
+            : undefined,
+      }
     : {
         status: "needs_review",
         orderId: order.id,

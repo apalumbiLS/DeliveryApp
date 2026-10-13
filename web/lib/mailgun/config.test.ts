@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
-import { companyOrderAddress, isInboundAddressReady } from "./config";
+import {
+  companyOrderAddress,
+  intentOrderAddress,
+  isInboundAddressReady,
+} from "./config";
 
 const ready = {
   domain: "inbound.prototype.example",
@@ -34,5 +38,16 @@ describe("customer-facing inbound address", () => {
     expect(companyOrderAddress(null, ready)).toBeNull();
     expect(companyOrderAddress("bad@other-domain", ready)).toBeNull();
     expect(companyOrderAddress("a".repeat(65), ready)).toBeNull();
+    expect(companyOrderAddress("cart-forged", ready)).toBeNull();
+  });
+
+  test("formats only a ready, opaque one-use intent address", () => {
+    const token = "a".repeat(32);
+    expect(intentOrderAddress(token, ready)).toBe(
+      `cart-${token}@inbound.prototype.example`,
+    );
+    expect(intentOrderAddress(token, { ...ready, ready: "false" })).toBeNull();
+    expect(intentOrderAddress("short", ready)).toBeNull();
+    expect(intentOrderAddress("A".repeat(32), ready)).toBeNull();
   });
 });

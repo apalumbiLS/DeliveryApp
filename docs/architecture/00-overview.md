@@ -53,7 +53,7 @@ These five findings were derived by inspecting the real Home Depot share-cart em
 | Payments        | Stripe Payment Links + webhook                                                            |
 | Background jobs | **Vercel Cron sweeps** over a notifications outbox + broadcast expiry. No workflow engine |
 | Intake paths    | Stable company Mailgun address is enough; optional pre-cart portal flow; no live checkout |
-| Order identity  | Stable plus-tag local part per company; one-use intent addresses planned for optional portal |
+| Order identity  | Stable plus-tag local part per company; optional portal one-use addresses coded in migration `0008` |
 | Company model   | Company = org, **one portal login** per company                                           |
 | Auth            | Email-as-username + password (Supabase Auth)                                              |
 | Store capture   | Customer supplies it in optional portal flow; dispatcher collects it for direct-email orders |
@@ -318,7 +318,7 @@ Next.js/Bun and Supabase schema are scaffolded; the pilot has North Carolina Low
 
 ### Phase 2 — Email intake + parsing _(highest risk — deliberately early)_
 
-Lowe's parser and a signed Mailgun `forward()` handler exist. Route the verified inbound domain to that **single parsed-email callback**; optional `store()` has no `notify` URL. Receiving-domain validation, one-use intent addresses, atomic persistence and visible exception review are still required before a live customer rollout. Home Depot and AI fallback are deferred.
+Lowe's parser, signed Mailgun `forward()` handler, recipient-domain validation and one-use portal addresses exist in code (the last requires migration `0008`). Route the verified inbound domain to that **single parsed-email callback**; optional `store()` has no `notify` URL. Atomic persistence, verified/provisional sender handling and visible exception review are still required before the client pilot; Home Depot and AI fallback are deferred.
 
 ### Phase 3 — Dispatcher console
 

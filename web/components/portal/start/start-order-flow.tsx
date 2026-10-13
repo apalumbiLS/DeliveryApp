@@ -56,6 +56,7 @@ export function StartOrderFlow({
   const [retailerId, setRetailerId] = useState<RetailerId | null>(null);
   const [storeId, setStoreId] = useState<string | null>(null);
   const [intentId, setIntentId] = useState<string | null>(null);
+  const [intentAddress, setIntentAddress] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [zipResolution, setZipResolution] = useState<{
@@ -168,10 +169,15 @@ export function StartOrderFlow({
     true,
   ][step];
 
+  function clearIntent() {
+    setIntentId(null);
+    setIntentAddress(null);
+  }
+
   async function saveAndAdvance() {
     setError(null);
 
-    if (intentId) {
+    if (intentId && intentAddress) {
       setStep(4);
       return;
     }
@@ -209,6 +215,7 @@ export function StartOrderFlow({
     }
 
     setIntentId(result.intentId);
+    setIntentAddress(result.orderAddress);
     setStep(4);
   }
 
@@ -267,13 +274,18 @@ export function StartOrderFlow({
             savedSiteId={savedSiteId}
             address={address}
             onSelectSaved={(id) => {
+              clearIntent();
               setSiteMode("saved");
               setSavedSiteId(id);
             }}
-            onSelectNew={() => setSiteMode("new")}
-            onAddressChange={(patch) =>
-              setAddress((current) => ({ ...current, ...patch }))
-            }
+            onSelectNew={() => {
+              clearIntent();
+              setSiteMode("new");
+            }}
+            onAddressChange={(patch) => {
+              clearIntent();
+              setAddress((current) => ({ ...current, ...patch }));
+            }}
           />
         ) : null}
 
@@ -283,6 +295,7 @@ export function StartOrderFlow({
             unavailable={unavailableRetailers}
             value={activeRetailerId}
             onChange={(id) => {
+              clearIntent();
               setRetailerId(id);
               setStoreId(null);
             }}
@@ -295,7 +308,10 @@ export function StartOrderFlow({
             value={activeStoreId}
             siteLabel={siteLabel}
             hasCoordinates={sitePoint !== null}
-            onChange={setStoreId}
+            onChange={(id) => {
+              clearIntent();
+              setStoreId(id);
+            }}
           />
         ) : null}
 
@@ -314,7 +330,7 @@ export function StartOrderFlow({
           <BuildShareStep
             retailerId={activeRetailerId}
             store={activeEntry}
-            alias={alias}
+            alias={intentId && alias ? intentAddress : null}
             aliasDiagnostic={aliasDiagnostic}
           />
         ) : null}
