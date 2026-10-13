@@ -1,8 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 
-import { DELIVERY_SIZES, type DeliverySize } from "@/components/console/size-picker";
+import {
+  DELIVERY_SIZES,
+  type DeliverySize,
+} from "@/components/console/size-picker";
+import { finalizeProvisionalEmail } from "@/lib/intake/finalize-provisional";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 import { canQueueInvite, CHECKOUT_INVITES_ENABLED } from "./invite";
 import { requireDispatcher } from "./require-dispatcher";
@@ -27,7 +33,8 @@ function parseSize(value: FormDataEntryValue | null): DeliverySize | null {
 
 /** Dollars from the form to integer cents, which is how every money column is stored. */
 function parseCents(value: FormDataEntryValue | null): number | null {
-  const raw = typeof value === "string" ? value.trim().replace(/[$,]/g, "") : "";
+  const raw =
+    typeof value === "string" ? value.trim().replace(/[$,]/g, "") : "";
   if (raw === "") return 0;
 
   const amount = Number(raw);
@@ -59,7 +66,11 @@ export async function updateOrderStore(formData: FormData): Promise<void> {
     .eq("id", storeId)
     .maybeSingle();
 
-  const store = storeData as { id: string; retailer: string; active: boolean } | null;
+  const store = storeData as {
+    id: string;
+    retailer: string;
+    active: boolean;
+  } | null;
 
   // The store has to belong to the same retailer as the cart. Switching a
   // Home Depot cart to a Lowe's store would send a driver somewhere the cart
@@ -102,7 +113,10 @@ export async function updateOrderQuote(formData: FormData): Promise<void> {
     .eq("id", orderId)
     .maybeSingle();
 
-  const order = orderData as { tax_cents: number; discount_cents: number } | null;
+  const order = orderData as {
+    tax_cents: number;
+    discount_cents: number;
+  } | null;
   if (!order) return;
 
   const totalCents =
@@ -196,4 +210,48 @@ export async function queueCheckoutInvite(formData: FormData): Promise<void> {
 
   revalidatePath(`/dispatch/review/${orderId}`);
   revalidatePath("/dispatch/review");
+}
+
+export async function approveInboundEmail(formData: FormData): Promise<void> {
+  const { supabase, userId } = await requireDispatcher();
+  const inboundId = String(formData.get("inboundId") ?? "");
+  const companyId = String(formData.get("companyId") ?? "");
+  if (!inboundId || !companyId) return;
+
+  let orderId: string;
+  try {
+    const result = await finalizeProvisionalEmail(
+      supabase,
+      createAdminClient(),
+      inboundId,
+      companyId,
+      userId,
+      process.env.ORDER_ALIAS_DOMAIN,
+    );
+    orderId = result.orderId;
+  } catch {
+    redirect(`/dispatch/review/inbound/${inboundId}?error=approval-failed`);
+  }
+  revalidatePath("/dispatch/review");
+  redirect(`/dispatch/review/${orderId}`);
+}
+
+export async function dismissInboundEmail(formData: FormData): Promise<void> {
+  const { supabase } = await requireDispatcher();
+  const inboundId = String(formData.get("inboundId") ?? "");
+  if (!inboundId) return;
+
+  const { data, error } = await supabase
+    .from("inbound_emails")
+    .update({ review_status: "dismissed", processing_status: "ignored" })
+    .eq("id", inboundId)
+    .eq("review_status", "pending")
+    .is("order_id", null)
+    .select("id")
+    .maybeSingle();
+  if (error || !data) {
+    redirect(`/dispatch/review/inbound/${inboundId}?error=dismissal-failed`);
+  }
+  revalidatePath("/dispatch/review");
+  redirect("/dispatch/review");
 }

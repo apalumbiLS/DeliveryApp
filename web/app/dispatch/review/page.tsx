@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { Card } from "@/components/ui/card";
-import { listQueue } from "@/lib/dispatch/review-queue";
+import { listInboundExceptions, listQueue } from "@/lib/dispatch/review-queue";
 import { requireDispatcher } from "@/lib/dispatch/require-dispatcher";
 
 export const metadata: Metadata = {
@@ -11,7 +11,14 @@ export const metadata: Metadata = {
 
 export default async function ReviewQueuePage() {
   const { supabase } = await requireDispatcher();
-  const queue = await listQueue(supabase);
+  const [queue, exceptions] = await Promise.all([
+    listQueue(supabase),
+    listInboundExceptions(supabase),
+  ]);
+
+  if (queue.length === 0 && exceptions.length > 0) {
+    redirect(`/dispatch/review/inbound/${exceptions[0].id}`);
+  }
 
   if (queue.length === 0) {
     return (
@@ -19,8 +26,8 @@ export default async function ReviewQueuePage() {
         <Card className="p-6">
           <h2 className="text-[13px] font-medium text-ink">Nothing waiting</h2>
           <p className="mt-1 text-[12.5px] leading-relaxed text-ink-muted">
-            A cart lands here as soon as a customer shares one. An empty queue
-            means every order has been verified and sent on.
+            New carts and exceptions appear here. No email is waiting for
+            dispatcher review.
           </p>
         </Card>
       </div>

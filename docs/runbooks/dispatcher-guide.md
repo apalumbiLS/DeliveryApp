@@ -2,7 +2,7 @@
 
 Operating the delivery platform, order by order.
 
-> **Status:** Describes the target system. Not yet implemented — see [00-overview](../architecture/00-overview.md).
+> **Status:** Pilot intake and inbound review are being prepared; migration `0009` is not applied. The delivery, checkout and payment sections below describe future behavior, **not** capabilities available for the client test. See [00-overview](../architecture/00-overview.md).
 >
 > This replaces the low-tech Google Sheets + Slack runbook in `External Notes/Low Tech Flow.pdf`. That process is retired.
 
@@ -41,22 +41,16 @@ flowchart LR
 
 ## 1. Review the queue
 
-**Where:** `/dispatch/review-queue`
+**Where:** `/dispatch/review`
 
-Two things land here:
-
-- **Unparsed carts** — the parser failed, so you correct the items and advance the order.
-- **Unattributed emails** — a cart arrived at an address that matches no company. Either attach it to the right company or dismiss it.
-
-An order never silently disappears. If it didn't parse, it is waiting here.
+Inbound emails enter the **same worklist** as orders, but do not automatically become orders. A Lowe's email with validated line items appears as a **provisional preview**, since a From address or DKIM header alone does not authenticate the sender. Verify the source and company before approving; approval runs the prepared transactional finalization function once migration `0009` is applied. An unknown address can be attached to a company only after off-platform verification, or dismissed. A failed parse shows its reason and original email; it **cannot** be approved as a valid item list. Request a fresh cart or wait for a later correction tool. No driver job is created from a provisional email.
 
 ### Resolving a failed parse
 
-1. Open the order. The raw email is rendered beside an editable item table.
-2. Compare what was extracted against what the email shows.
-3. Correct the items — description, model number, quantity, and line total.
-4. Confirm the subtotal reconciles. **The system will not let you advance until the line totals sum to the stated subtotal** — this is the check that catches a misread cart.
-5. Advance to `awaiting_customer`.
+1. Open the inbound exception and read the original email in its restricted preview.
+2. Compare the provisional names, Lowe's item/model numbers and quantities against that source. Lowe's share-cart emails **do not contain prices or a subtotal**.
+3. If extraction failed, do not approve an incomplete list. Ask for a fresh cart; the app does not yet offer manual item correction.
+4. Only approve a validated, legitimate email after confirming its company. This creates a `received` order for dispatcher review, **not** an `awaiting_customer` order.
 
 You do not need to be fast. A cart that fails to parse is a signal the retailer changed their template, and it is worth flagging so the parser can be fixed.
 
@@ -84,17 +78,15 @@ Enter the sizing fee and the mileage fee. The total is computed:
 materials subtotal + sizing fee + mileage fee − discount + tax = total
 ```
 
-Materials come from the parsed cart and are not editable here. If the cart is wrong, fix it on the items panel.
+Lowe's sends **no materials prices** in the share-cart email. A dispatcher has to obtain the estimate and enter materials, sizing and mileage amounts by hand. The order's initial zero is an unknown amount, not a free delivery.
 
 The fee structure is not yet settled — that is why you enter fees rather than the system calculating them. When the pricing model is decided, this becomes a rules table.
 
 ---
 
-## 4. Send the checkout invite
+## 4. Checkout invite — future phase, disabled for the client pilot
 
-**Where:** order detail → _Send checkout invite_
-
-The customer receives an email with the item list, the full price breakdown, and a link to the portal. They verify the items, enter the delivery address and instructions, accept the price, and pay.
+The order detail's _Send checkout invite_ control is disabled. There is no outbound email or customer checkout page yet. Older prototype rows may show **"Invite queued — not sent"**; do not treat those records as customer contact. Collect missing site, store and materials details directly with the client until a confirmation flow is built and tested.
 
 ### If the customer never completes checkout
 

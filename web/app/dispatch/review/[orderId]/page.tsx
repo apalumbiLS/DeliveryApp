@@ -15,7 +15,11 @@ import { notFound } from "next/navigation";
 
 import { Band } from "@/components/console/band";
 import { CheckDot } from "@/components/console/check-row";
-import { SizePicker, type DeliverySize } from "@/components/console/size-picker";
+import { InboundExceptionList } from "@/components/console/inbound-exception-list";
+import {
+  SizePicker,
+  type DeliverySize,
+} from "@/components/console/size-picker";
 import { Td, Th } from "@/components/console/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -28,8 +32,10 @@ import {
 import { blockingGate, type Gate } from "@/lib/dispatch/gates";
 import { CHECKOUT_INVITES_ENABLED } from "@/lib/dispatch/invite";
 import {
+  listInboundExceptions,
   listQueue,
   loadOrderDetail,
+  type InboundException,
   type OrderDetail,
   type QueueEntry,
 } from "@/lib/dispatch/review-queue";
@@ -60,9 +66,11 @@ function shortAge(iso: string): string {
 
 function QueueRail({
   queue,
+  exceptions,
   selectedId,
 }: {
   queue: QueueEntry[];
+  exceptions: InboundException[];
   selectedId: string;
 }) {
   return (
@@ -99,10 +107,7 @@ function QueueRail({
                 {entry.storeName ?? "No store"}
               </div>
               <div className="mt-1.5 flex items-center gap-1.5">
-                <Badge
-                  tone={entry.needsReview ? "danger" : "info"}
-                  bordered
-                >
+                <Badge tone={entry.needsReview ? "danger" : "info"} bordered>
                   {entry.needsReview ? "Could not read" : "Ready to verify"}
                 </Badge>
                 <span className="truncate text-[11px] text-ink-faint">
@@ -113,6 +118,7 @@ function QueueRail({
           </li>
         ))}
       </ul>
+      <InboundExceptionList entries={exceptions} />
     </div>
   );
 }
@@ -247,7 +253,9 @@ function DeliveryBand({
             <span className="text-[11.5px] font-medium text-ink-muted">
               Deliver to
             </span>
-            <span className="text-[10.5px] text-ink-faint">from the portal</span>
+            <span className="text-[10.5px] text-ink-faint">
+              from the portal
+            </span>
           </div>
           <div className="mt-1.5 rounded-field border border-hairline bg-card-muted px-2.5 py-2">
             <div className="text-[12px] font-medium">
@@ -309,7 +317,9 @@ function DeliveryBand({
               .map((option) => (
                 <option key={option.id} value={option.id}>
                   {option.label ?? option.name}
-                  {option.miles != null ? ` — ${option.miles.toFixed(1)} mi` : ""}
+                  {option.miles != null
+                    ? ` — ${option.miles.toFixed(1)} mi`
+                    : ""}
                 </option>
               ))}
           </select>
@@ -340,7 +350,9 @@ function DeliveryBand({
           <div className="mt-1.5">
             <SizePicker
               name="deliverySize"
-              selected={(detail.order.deliverySize as DeliverySize | null) ?? null}
+              selected={
+                (detail.order.deliverySize as DeliverySize | null) ?? null
+              }
             />
           </div>
 
@@ -441,7 +453,8 @@ function GateBar({
   orderId: string;
 }) {
   const blocker = blockingGate(detail.gates);
-  const canInvite = CHECKOUT_INVITES_ENABLED && !blocker && Boolean(detail.inviteRecipient);
+  const canInvite =
+    CHECKOUT_INVITES_ENABLED && !blocker && Boolean(detail.inviteRecipient);
 
   return (
     <div className="sticky bottom-0 mt-3 border-t border-hairline bg-surface pt-3 pb-3">
@@ -483,16 +496,17 @@ export default async function ReviewOrderPage(
   const { orderId } = await props.params;
   const { supabase } = await requireDispatcher();
 
-  const [queue, detail] = await Promise.all([
+  const [queue, detail, exceptions] = await Promise.all([
     listQueue(supabase),
     loadOrderDetail(supabase, orderId),
+    listInboundExceptions(supabase),
   ]);
 
   if (!detail) notFound();
 
   return (
     <div className="flex min-h-full">
-      <QueueRail queue={queue} selectedId={orderId} />
+      <QueueRail queue={queue} exceptions={exceptions} selectedId={orderId} />
       <div className="flex min-w-0 flex-1 flex-col px-4 py-3.5">
         <div className="space-y-3">
           <ItemsBand detail={detail} orderId={orderId} />

@@ -16,6 +16,11 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 
+import {
+  isParsedMailgunContentType,
+  MAX_MAILGUN_BODY_BYTES,
+  parseMailgunForm,
+} from "@/lib/intake/mailgun-form";
 import { processInboundEmail } from "@/lib/intake/process-inbound-email";
 import { verifyMailgunSignature } from "@/lib/intake/verify-mailgun";
 import { isMailgunConfigured } from "@/lib/mailgun/config";
@@ -37,23 +42,54 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  let form: FormData;
-  try {
-    form = await request.formData();
-  } catch {
-    return NextResponse.json({ error: "expected form data" }, { status: 400 });
+  const contentType = request.headers.get("content-type");
+  if (!isParsedMailgunContentType(contentType)) {
+    return NextResponse.json(
+      { error: "unsupported mail format" },
+      { status: 406 },
+    );
   }
 
-  const field = (name: string): string | null => {
-    const value = form.get(name);
-    return typeof value === "string" ? value : null;
-  };
+  const declaredLength = Number(request.headers.get("content-length"));
+  if (declaredLength > MAX_MAILGUN_BODY_BYTES) {
+    return NextResponse.json({ error: "email too large" }, { status: 406 });
+  }
+
+  let form: FormData;
+  try {
+    if (!request.body) throw new Error("Missing body");
+    const reader = request.body.getReader();
+    const chunks: Buffer[] = [];
+    let size = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > MAX_MAILGUN_BODY_BYTES) {
+        await reader.cancel();
+        return NextResponse.json({ error: "email too large" }, { status: 406 });
+      }
+      chunks.push(Buffer.from(value));
+    }
+    form = await new Request(request.url, {
+      method: "POST",
+      headers: { "content-type": contentType! },
+      body: Buffer.concat(chunks),
+    }).formData();
+  } catch {
+    return NextResponse.json({ error: "invalid form data" }, { status: 406 });
+  }
+
+  const parsed = parseMailgunForm(form);
+  if (!parsed.ok) {
+    return NextResponse.json({ error: parsed.reason }, { status: 406 });
+  }
 
   const verification = verifyMailgunSignature({
     signingKey: process.env.MAILGUN_SIGNING_KEY,
-    timestamp: field("timestamp"),
-    token: field("token"),
-    signature: field("signature"),
+    timestamp: parsed.timestamp,
+    token: parsed.token,
+    signature: parsed.signature,
   });
 
   if (!verification.ok) {
@@ -63,21 +99,16 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const result = await processInboundEmail(createAdminClient(), {
-      recipient: field("recipient") ?? "",
-      sender: field("sender") ?? field("from") ?? "",
-      subject: field("subject"),
-      bodyHtml: field("body-html") ?? "",
-      bodyPlain: field("body-plain"),
-      strippedHtml: field("stripped-html"),
-      messageHeadersRaw: field("message-headers"),
-    });
+    const result = await processInboundEmail(createAdminClient(), parsed.email);
 
     return NextResponse.json(result, { status: 200 });
   } catch (error) {
     // A real failure — the database rejected a write, most likely. Let Mailgun
     // retry rather than swallowing it; the retry re-runs an unfinished attempt.
-    console.error("[mailgun inbound] processing failed", error);
+    console.error(
+      "[mailgun inbound] processing failed",
+      error instanceof Error ? error.name : "Unknown error",
+    );
 
     return NextResponse.json(
       { error: "could not process the email" },

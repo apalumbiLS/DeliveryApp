@@ -31,6 +31,7 @@ export function emptyDatabase(): FakeDatabase {
 
 class FakeQuery implements PromiseLike<Response> {
   private filters: [string, unknown][] = [];
+  private inFilters: [string, unknown[]][] = [];
   private columns = "*";
   private orderColumn: string | null = null;
   private orderAscending = true;
@@ -68,6 +69,15 @@ class FakeQuery implements PromiseLike<Response> {
     return this;
   }
 
+  is(column: string, value: unknown) {
+    return this.eq(column, value);
+  }
+
+  in(column: string, values: unknown[]) {
+    this.inFilters.push([column, values]);
+    return this;
+  }
+
   order(column: string, options?: { ascending?: boolean }) {
     this.orderColumn = column;
     this.orderAscending = options?.ascending ?? true;
@@ -90,9 +100,7 @@ class FakeQuery implements PromiseLike<Response> {
   }
 
   then<R1, R2>(
-    onfulfilled?:
-      | ((value: Response) => R1 | PromiseLike<R1>)
-      | null,
+    onfulfilled?: ((value: Response) => R1 | PromiseLike<R1>) | null,
     onrejected?: ((reason: unknown) => R2 | PromiseLike<R2>) | null,
   ): PromiseLike<R1 | R2> {
     return this.run().then(onfulfilled, onrejected);
@@ -112,7 +120,8 @@ class FakeQuery implements PromiseLike<Response> {
         if (
           this.table === "inbound_emails" &&
           rows.some(
-            (existing) => existing.mailgun_message_id === row.mailgun_message_id,
+            (existing) =>
+              existing.mailgun_message_id === row.mailgun_message_id,
           )
         ) {
           return {
@@ -131,8 +140,14 @@ class FakeQuery implements PromiseLike<Response> {
       return this.respond(created);
     }
 
-    const matching = rows.filter((row) =>
-      this.filters.every(([column, value]) => row[column] === value),
+    const matching = rows.filter(
+      (row) =>
+        this.filters.every(
+          ([column, value]) => (row[column] ?? null) === value,
+        ) &&
+        this.inFilters.every(([column, values]) =>
+          values.includes(row[column]),
+        ),
     );
 
     if (this.operation === "update") {

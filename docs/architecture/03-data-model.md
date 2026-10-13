@@ -176,10 +176,13 @@ Every message that reaches the inbound webhook, stored before any interpretation
 | `headers`            | jsonb                                                | Full header list                                       |
 | `raw_storage_path`   | text                                                 | Original MIME in storage, for reprocessing             |
 | `processing_status`  | inbound_processing_status NOT NULL DEFAULT 'pending' |                                                        |
-| `order_id`           | uuid FK → orders                                     | Null until an order is created                         |
+| `company_id`         | uuid FK → companies                                  | Migration `0009`; null for unknown recipient until dispatcher assigns |
+| `review_reason`      | text                                                 | Migration `0009`; visible exception/provisional reason |
+| `review_status`      | text NOT NULL DEFAULT 'pending'                      | Migration `0009`: pending / approved / dismissed; no order before approval |
+| `order_id`           | uuid FK → orders                                     | Null until dispatcher approval finalizes an order     |
 | `received_at`        | timestamptz NOT NULL                                 |                                                        |
 
-Storing the raw email before interpreting it is what makes the parser safely re-runnable: a fixed parser can be replayed over history without asking customers to resend.
+Storing the HTML email and headers before interpreting them makes the parser re-runnable. The full raw MIME is **not** currently stored in `raw_storage_path`; optional Mailgun `store()` (without `notify`) is the temporary backup. Parsed contents are provisional until a dispatcher approves; migration `0009` defines the one-call SQL finalization contract for order, items, intent claim, audit event and inbound link. That SQL is not yet DB-tested.
 
 ### `parse_attempts`
 

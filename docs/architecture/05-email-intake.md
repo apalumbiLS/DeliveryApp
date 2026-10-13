@@ -2,7 +2,7 @@
 
 A customer builds a Lowe's cart and uses Lowe's **Share Cart** to send it to their company's address on the prototype Mailgun receiving domain. The application parses it into dispatcher work. A portal visit is **optional**.
 
-> **Status:** The parser, signed webhook and one-use portal address code exist; migration `0008_intent_mail_tokens.sql` still requires your review/application. The temporary domain's receiving MX and a real Mailgun → Vercel delivery are **not verified**. Keep `ORDER_INTAKE_READY=false` until atomic persistence, trusted/provisional sender handling, exception review and a real end-to-end test are complete.
+> **Status:** The parser, signed webhook, one-use portal address, provisional intake and dispatcher exception UI exist in code. Migration `0009_inbound_review_and_finalization.sql` is **prepared but has not been run or DB-tested**. Mailgun → Vercel delivery and receiving MX have not been verified. Keep `ORDER_INTAKE_READY=false` until the migration and a real mail-to-queue test are complete.
 
 ## The critical detail: the sender is the retailer, not the customer
 
@@ -35,13 +35,14 @@ Do not point a second Mailgun route at the same recipient and handler without co
 
 | Concern | Current code | Required before declaring live |
 |---|---|---|
-| Endpoint | `POST /api/webhooks/mailgun/inbound`, `web/app/api/webhooks/mailgun/inbound/route.ts` | Capture and test a **real** Mailgun form payload, not just a Gmail-exported `.eml` |
+| Endpoint | `POST /api/webhooks/mailgun/inbound`, `web/app/api/webhooks/mailgun/inbound/route.ts`; form-encoded/multipart only, one non-empty HTML part, bounded payload | Capture and test a **real** redacted Mailgun form payload; `.eml` export alone is not a provider-contract test |
 | Signature | HMAC-SHA256 of timestamp + token using `MAILGUN_SIGNING_KEY`; 406 on mismatch | Verify current account key and retry/timestamp behavior. Never log the key, token or raw body |
-| Recipient | `lib/intake/resolve-recipient.ts` validates the full address's configured domain. Exact stable company alias resolves the company only; a known `cart-<token>` resolves its owner and an eligible unused intent. Unknown token/domain has no order | Pair current/legacy account keys with the respective domains during the later account handoff; do not infer company from an unrecognized address |
-| Idempotency | The legacy-named `mailgun_message_id` column now holds SHA-256 of **normalized recipient + Message-ID** (or recipient + message content when Message-ID is absent) | The whole intake must become atomic; current separate writes can strand a partial order on failure |
-| Retailer authenticity | Checks only for a `DKIM-Signature d=` header | Presence is **forgeable**, not verified authentication. Quarantine uncertain messages visibly; validate provider evidence with a real signed capture |
-| Persistence | Records inbound email, attempt, order, items, intent and state in separate calls | Check every write and finalize related records transactionally so retries cannot strand half-orders |
-| Customer email | No actual sending or checkout destination exists | **No automatic customer email or driver dispatch** in this intake milestone |
+| Recipient | `lib/intake/resolve-recipient.ts` validates the configured domain and resolves stable company or opaque intent address | Pair current/legacy keys to domains during the later account handoff |
+| Idempotency | `mailgun_message_id` holds SHA-256 of **recipient + Message-ID** (or recipient + content fallback); completed or review-pending duplicates are no-ops | Confirm actual retry behavior in Mailgun; SQL finalization uses a row lock and `orders.inbound_email_id` unique constraint |
+| Retailer authenticity | The `From` domain and `DKIM-Signature d=` can be forged; **every parsed cart remains provisional** | A dispatcher reviews it before any order is made. Provider-verified aligned authentication could be evaluated later, after a real signed capture |
+| Persistence | Persist raw inbound mail, parse attempt and explicit review reason; approved message calls `finalize_inbound_cart` for order + items + initial event + one-use intent claim + inbound status in one SQL transaction | SQL contract has **not** been executed against Postgres; unit tests mock the RPC and do not prove atomicity or RLS |
+| Dispatcher review | `/dispatch/review` includes provisional/failed/unknown inbound entries; sanitized, sandboxed email preview and explicit approve/dismiss actions | Only a validated Lowe's preview can be approved as an order; a failed parse needs another cart or a later item-correction flow |
+| Customer email | No outbound send or checkout destination exists | **No automatic customer email or driver dispatch** in this intake milestone |
 
 The current route accepts `formData` and calls the processor inline. Do not assume tests using `fake-supabase.ts` prove real Postgres/RLS behavior. For permanent invalid requests (e.g. bad signature) return 406 without creating an order; for transient persistence failures return a retryable 5xx; return 200 only after a durable decision. Mailgun's `store(notify=…)` is not a fallback for an unverified/blocked `forward()` endpoint.
 
@@ -49,7 +50,7 @@ The current route accepts `formData` and calls the processor inline. Do not assu
 
 A Mailgun signature authenticates **Mailgun's POST**, not the author of the retailer email. The form payload's HMAC uses `timestamp + token`, not the HTML body. Treat a malformed or expired signature as invalid, but test the timestamp window against actual retries before relying on it for recovery. A token cache must not reject Mailgun's legitimate retry of a delivery that failed to commit.
 
-For the retailer, a displayed From address or `DKIM-Signature d=` is **not sufficient**. Mailgun can add `X-Mailgun-Dkim-Check-Result` when spam filtering is configured to *mark with MIME headers*, but `Pass` alone does not prove which domain signed and inbound headers may contain sender-supplied copies. Until a real payload and spoofed-header test establish reliable, aligned provider evidence, parse as a **read-only provisional preview**, then require an authorized dispatcher to approve it before creating an operational order.
+For the retailer, a displayed From address or `DKIM-Signature d=` is **not sufficient**. Mailgun can add `X-Mailgun-Dkim-Check-Result` when spam filtering is configured to *mark with MIME headers*, but `Pass` alone does not prove which domain signed and inbound headers may contain sender-supplied copies. This prototype **always parses to a provisional preview**, never automatically to an order, even if a matching `d=` appears. An authenticated dispatcher verifies the message and approves it. An unrecognized sender, unknown alias, or failed parser stays visibly unresolved.
 
 ## Processing flow (target)
 
@@ -66,10 +67,11 @@ sequenceDiagram
     Mailgun->>App: one signed forward() with envelope recipient + body
     App->>DB: record/dedupe inbound message
     App->>DB: resolve company via stable alias or one-use intent alias
-    App->>DB: parse and persist trusted order atomically OR provisional exception
-    App-->>Mailgun: 200 only after durable decision
-    DB-->>Dispatcher: ordinary order or visible exception in one worklist
-    Dispatcher->>DB: verify and complete missing site/store/materials
+    App->>DB: parse into provisional preview or exception, no order yet
+    App-->>Mailgun: 200 only after durable review record
+    DB-->>Dispatcher: provisional cart or visible exception in one worklist
+    Dispatcher->>DB: approve validated cart through atomic finalization RPC
+    DB-->>Dispatcher: reviewable order with items; collect missing site/store/materials
     Note over App,Dispatcher: No customer email or automatic dispatch on receipt
 ```
 
@@ -77,11 +79,11 @@ Lowe's does not state a materials price, so **zero in the current schema means u
 
 ## Idempotency and intent matching
 
-Mailgun retries and can redeliver. The inbox's unique key is SHA-256 of `normalized envelope recipient + Message-ID` (or recipient + sender/subject/body fingerprint without Message-ID). A retry of the same message produces one order; the same Message-ID delivered to **different** company addresses is not suppressed. Two different messages to one consumed token create distinct orders, and only the first eligible one carries the intent's site/store. An expired or retailer-mismatched intent still identifies its company but **does not** donate site/store. Never fall back to the company's "latest open" intent for stable-alias mail. Existing order, items, token claim and inbound status are still separate writes; the next phase must make them atomic before live pilot intake.
+Mailgun retries and can redeliver. The inbox's unique key is SHA-256 of `normalized envelope recipient + Message-ID` (or recipient + sender/subject/body fingerprint without Message-ID). A retry of the same message produces one order; the same Message-ID delivered to **different** company addresses is not suppressed. Two different messages to one consumed token create distinct orders, and only the first eligible one carries the intent's site/store. An expired or retailer-mismatched intent still identifies its company but **does not** donate site/store. Never fall back to the company's "latest open" intent for stable-alias mail. A dispatcher-approved preview is finalized by `finalize_inbound_cart` in migration `0009`: order, items, one-use intent, status event and inbound link either all commit or all roll back. The **migration is unexecuted**; mocked RPC tests only establish caller/return contracts.
 
 ## Sender authenticity and unknown aliases
 
-An unknown company alias/token, unsupported sender, unverified retailer, or failed parse is a **visible dispatcher exception**, not a silently ignored message or an automatically dispatchable order. The current implementation stores some such messages with no order, but the existing dispatcher query only lists `orders` in `received`/`needs_review`; the unified exception view is pending. A dispatcher must manually verify a questionable message before accepting/attributing it. Never auto-create companies from inbound mail.
+An unknown company alias/token, unsupported sender, unverified retailer, or failed parse is a **visible dispatcher exception**, not a silently ignored message or an automatically dispatchable order. The same `/dispatch/review` worklist includes `inbound_emails` with `review_status='pending'` and no order. A validated provisional Lowe's cart can be approved (and an unknown alias assigned after off-platform company verification) or dismissed. A failed parser has no valid items to approve; obtain a new cart or wait for a correction flow. No company is auto-created from inbound mail. Historical review records and raw messages are not deleted.
 
 ## Out of scope for this milestone
 

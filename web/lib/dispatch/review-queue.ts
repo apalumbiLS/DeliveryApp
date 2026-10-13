@@ -133,7 +133,9 @@ function addressLines(address: unknown): string | null {
     value.line2,
     [value.city, value.state].filter(Boolean).join(", "),
     value.postalCode,
-  ].filter((part): part is string => typeof part === "string" && part.length > 0);
+  ].filter(
+    (part): part is string => typeof part === "string" && part.length > 0,
+  );
 
   return parts.length > 0 ? parts.join(" · ") : null;
 }
@@ -175,7 +177,10 @@ export async function listQueue(
     supabase
       .from("order_items")
       .select("order_id")
-      .in("order_id", orders.map((order) => order.id)),
+      .in(
+        "order_id",
+        orders.map((order) => order.id),
+      ),
   ]);
 
   const companyNames = new Map(
@@ -235,7 +240,9 @@ export async function loadOrderDetail(
         .maybeSingle(),
       supabase
         .from("order_items")
-        .select("id, line_no, description, model_number, store_sku, quantity, image_url")
+        .select(
+          "id, line_no, description, model_number, store_sku, quantity, image_url",
+        )
         .eq("order_id", order.id)
         .order("line_no", { ascending: true }),
       order.inbound_email_id
@@ -261,13 +268,16 @@ export async function loadOrderDetail(
         .maybeSingle(),
     ]);
 
-  const company = companyResult.data as
-    | { name: string; billing_email: string | null }
-    | null;
+  const company = companyResult.data as {
+    name: string;
+    billing_email: string | null;
+  } | null;
 
-  const site = siteResult.data as
-    | { label: string | null; lat: number | null; lng: number | null }
-    | null;
+  const site = siteResult.data as {
+    label: string | null;
+    lat: number | null;
+    lng: number | null;
+  } | null;
 
   const sitePoint: Point | null =
     site && site.lat !== null && site.lng !== null
@@ -285,15 +295,17 @@ export async function loadOrderDetail(
     sitePoint,
   );
 
-  const items = ((itemsResult.data ?? []) as {
-    id: string;
-    line_no: number;
-    description: string;
-    model_number: string | null;
-    store_sku: string | null;
-    quantity: number;
-    image_url: string | null;
-  }[]).map((row) => ({
+  const items = (
+    (itemsResult.data ?? []) as {
+      id: string;
+      line_no: number;
+      description: string;
+      model_number: string | null;
+      store_sku: string | null;
+      quantity: number;
+      image_url: string | null;
+    }[]
+  ).map((row) => ({
     id: row.id,
     lineNo: row.line_no,
     description: row.description,
@@ -346,7 +358,8 @@ export async function loadOrderDetail(
     email: emailResult.data
       ? {
           id: (emailResult.data as { id: string }).id,
-          senderEmail: (emailResult.data as { sender_email: string }).sender_email,
+          senderEmail: (emailResult.data as { sender_email: string })
+            .sender_email,
           subject: (emailResult.data as { subject: string | null }).subject,
           receivedAt: (emailResult.data as { received_at: string }).received_at,
         }
@@ -381,14 +394,12 @@ async function loadParseAttempt(
     .limit(1)
     .maybeSingle();
 
-  const row = data as
-    | {
-        strategy: string;
-        succeeded: boolean;
-        parser_version: string | null;
-        errors: { reason?: string } | null;
-      }
-    | null;
+  const row = data as {
+    strategy: string;
+    succeeded: boolean;
+    parser_version: string | null;
+    errors: { reason?: string } | null;
+  } | null;
 
   if (!row) return null;
 
@@ -447,7 +458,8 @@ async function loadStores(
   const alternatives = options
     .filter((option) => option.id !== chosenId)
     .sort((a, b) => {
-      if (a.miles === null && b.miles === null) return a.name.localeCompare(b.name);
+      if (a.miles === null && b.miles === null)
+        return a.name.localeCompare(b.name);
       if (a.miles === null) return 1;
       if (b.miles === null) return -1;
       return a.miles - b.miles;
@@ -455,4 +467,67 @@ async function loadStores(
     .slice(0, ALTERNATIVES_SHOWN);
 
   return { chosen, alternatives };
+}
+
+export type InboundException = {
+  id: string;
+  recipient: string;
+  sender: string;
+  subject: string | null;
+  reason: string | null;
+  companyId: string | null;
+  companyName: string | null;
+  receivedAt: string;
+};
+
+export async function listInboundExceptions(
+  supabase: SupabaseClient,
+): Promise<InboundException[]> {
+  const { data, error } = await supabase
+    .from("inbound_emails")
+    .select(
+      "id, recipient, sender_email, subject, review_reason, company_id, received_at",
+    )
+    .eq("review_status", "pending")
+    .is("order_id", null)
+    .order("received_at", { ascending: true })
+    .limit(50);
+  if (error) throw new Error(`Could not load inbound review: ${error.message}`);
+  const rows = (data ?? []) as {
+    id: string;
+    recipient: string;
+    sender_email: string;
+    subject: string | null;
+    review_reason: string | null;
+    company_id: string | null;
+    received_at: string;
+  }[];
+  const ids = [
+    ...new Set(
+      rows
+        .map((row) => row.company_id)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  const { data: companies, error: companyError } = ids.length
+    ? await supabase.from("companies").select("id, name").in("id", ids)
+    : { data: [], error: null };
+  if (companyError)
+    throw new Error(`Could not load companies: ${companyError.message}`);
+  const names = new Map(
+    ((companies ?? []) as { id: string; name: string }[]).map((row) => [
+      row.id,
+      row.name,
+    ]),
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    recipient: row.recipient,
+    sender: row.sender_email,
+    subject: row.subject,
+    reason: row.review_reason,
+    companyId: row.company_id,
+    companyName: row.company_id ? (names.get(row.company_id) ?? null) : null,
+    receivedAt: row.received_at,
+  }));
 }

@@ -2,7 +2,7 @@
 
 Rehearsing the new process before it touches a real customer.
 
-> **Status:** Describes the target system. Not yet implemented — see [00-overview](../architecture/00-overview.md).
+> **Status:** The stages below are a **future end-to-end delivery rehearsal**, not the current client pilot. For this phase, validate a signed Lowe's form (using mocks), provisional review, explicit dispatcher approval, and no automatic checkout/dispatch. Migration `0009` is prepared but unexecuted; actual Mailgun delivery and database transaction verification remain user-run gates. See [05-email-intake](../architecture/05-email-intake.md).
 >
 > The source material calls for "a rehearsal, an onboarding with the Mitchells, and a first live with the Mitchells." This is that sequence.
 

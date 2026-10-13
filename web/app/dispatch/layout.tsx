@@ -28,12 +28,19 @@ export default async function DispatchLayout(props: LayoutProps<"/dispatch">) {
 
   // A count, not the queue itself: the layout runs on every navigation, and the
   // page loads the rows it actually needs.
-  const { count } = await supabase
-    .from("orders")
-    .select("id", { count: "exact", head: true })
-    .in("status", QUEUE_STATUSES);
+  const [ordersResult, inboundResult] = await Promise.all([
+    supabase
+      .from("orders")
+      .select("id", { count: "exact", head: true })
+      .in("status", QUEUE_STATUSES),
+    supabase
+      .from("inbound_emails")
+      .select("id", { count: "exact", head: true })
+      .eq("review_status", "pending")
+      .is("order_id", null),
+  ]);
 
-  const waiting = count ?? 0;
+  const waiting = (ordersResult.count ?? 0) + (inboundResult.count ?? 0);
 
   return (
     <ConsoleShell
