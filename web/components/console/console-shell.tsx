@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { APP_MARK } from "@/lib/brand";
+import { ConsoleSidebar } from "./console-sidebar";
 
 /**
  * The dispatcher console's chrome: a sidebar, a header, and a scrolling body.
@@ -20,10 +20,16 @@ export function ConsoleShell({
   nav,
   user,
   actions,
+  collapsible,
+  defaultCollapsed,
   children,
 }: {
   title: string;
   note?: string;
+  /** Lets the sidebar collapse to icons. The nav's links must carry icons. */
+  collapsible?: boolean;
+  /** The remembered wide-screen preference, read from `CONSOLE_NAV_COOKIE`. */
+  defaultCollapsed?: boolean;
   /** Rendered in the sidebar. A `ConsoleNav` in the app; a static list in a mockup. */
   nav: ReactNode;
   user: { name: string; initials: string; role: string };
@@ -32,28 +38,13 @@ export function ConsoleShell({
 }) {
   return (
     <div className="flex min-h-full flex-1 bg-surface font-sans text-ink">
-      <aside className="flex w-50 shrink-0 flex-col border-r border-hairline bg-card-muted px-3 py-4">
-        <div className="flex items-center gap-2 px-2 pb-6">
-          <div className="flex h-7 w-7 items-center justify-center rounded-control bg-accent text-[11px] font-semibold text-accent-ink">
-            {APP_MARK}
-          </div>
-          <span className="text-[13px] font-semibold tracking-tight">
-            Dispatch
-          </span>
-        </div>
-
+      <ConsoleSidebar
+        collapsible={collapsible}
+        defaultCollapsed={defaultCollapsed}
+        user={user}
+      >
         {nav}
-
-        <div className="mt-auto flex items-center gap-2 border-t border-hairline-soft px-2 pt-3">
-          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-accent-soft text-[10.5px] font-semibold text-accent-soft-ink">
-            {user.initials}
-          </div>
-          <div className="min-w-0">
-            <div className="truncate text-[12px] font-medium">{user.name}</div>
-            <div className="text-[11px] text-ink-faint">{user.role}</div>
-          </div>
-        </div>
-      </aside>
+      </ConsoleSidebar>
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between gap-4 border-b border-hairline px-5 py-3.5">

@@ -1,7 +1,9 @@
 import type { ReactNode } from "react";
+import { cookies } from "next/headers";
 
 import { ConsoleNav } from "@/components/console/console-nav";
 import { ConsoleShell } from "@/components/console/console-shell";
+import { CONSOLE_NAV_COOKIE } from "@/components/console/sidebar";
 import { requireDispatcher } from "@/lib/dispatch/require-dispatcher";
 
 /**
@@ -28,7 +30,7 @@ export default async function DispatchLayout(props: LayoutProps<"/dispatch">) {
 
   // A count, not the queue itself: the layout runs on every navigation, and the
   // page loads the rows it actually needs.
-  const [ordersResult, inboundResult] = await Promise.all([
+  const [ordersResult, inboundResult, cookieStore] = await Promise.all([
     supabase
       .from("orders")
       .select("id", { count: "exact", head: true })
@@ -38,6 +40,7 @@ export default async function DispatchLayout(props: LayoutProps<"/dispatch">) {
       .select("id", { count: "exact", head: true })
       .eq("review_status", "pending")
       .is("order_id", null),
+    cookies(),
   ]);
 
   const waiting = (ordersResult.count ?? 0) + (inboundResult.count ?? 0);
@@ -45,6 +48,10 @@ export default async function DispatchLayout(props: LayoutProps<"/dispatch">) {
   return (
     <ConsoleShell
       title="Review queue"
+      collapsible
+      defaultCollapsed={
+        cookieStore.get(CONSOLE_NAV_COOKIE)?.value === "collapsed"
+      }
       note={
         waiting === 0
           ? "Nothing waiting."
@@ -61,9 +68,10 @@ export default async function DispatchLayout(props: LayoutProps<"/dispatch">) {
             {
               href: "/dispatch/review",
               label: "Review queue",
+              icon: "review",
               badge: waiting,
             },
-            { href: "/admin", label: "Admin users" },
+            { href: "/admin", label: "Admin users", icon: "users" },
           ]}
         />
       }

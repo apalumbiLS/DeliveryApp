@@ -1,6 +1,60 @@
 @import "tailwindcss";
 @import "./styles/theme.css";
 
+/*
+ * The dispatcher console sidebar (components/console/console-sidebar.tsx).
+ * Wide screens follow the remembered preference; narrow screens are collapsed
+ * unless the sidebar has been opened over the page. Matches the sidebar itself
+ * as well as anything inside it.
+ */
+@custom-variant nav-collapsed {
+  @media (width >= 48rem) {
+    &:where([data-nav-collapsed="true"], [data-nav-collapsed="true"] *) {
+      @slot;
+    }
+  }
+  @media (width < 48rem) {
+    &:where([data-nav-open="false"], [data-nav-open="false"] *) {
+      @slot;
+    }
+  }
+}
+
+@custom-variant nav-expanded {
+  @media (width >= 48rem) {
+    &:where([data-nav-collapsed="false"], [data-nav-collapsed="false"] *) {
+      @slot;
+    }
+  }
+  @media (width < 48rem) {
+    &:where([data-nav-open="true"], [data-nav-open="true"] *) {
+      @slot;
+    }
+  }
+}
+
+/*
+ * Everything clickable shows the pointer hand. Tailwind v4 leaves buttons on
+ * the default arrow; links already get the hand from the browser.
+ */
+@layer base {
+  :is(
+    button,
+    [role="button"],
+    summary,
+    select,
+    label[for],
+    input:is(
+      [type="checkbox"],
+      [type="radio"],
+      [type="submit"],
+      [type="button"]
+    )
+  ):not(:disabled, [aria-disabled="true"]) {
+    cursor: pointer;
+  }
+}
+
 @theme inline {
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);

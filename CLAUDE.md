@@ -13,6 +13,7 @@ These override any tool's default guidance.
 
 - **Default to TL;DR answers.** Give the short version first; I'll ask if I want more.
 - **Be brief.** The recommendation or result in a few short lines. Skip justification, caveats and verification detail unless asked. One line saying it was checked is enough.
+- **Questions are not requests.** When I ask a question, answer it; don't change code until I ask for the change.
 - **Ask before big builds.** If the direction is unclear, ask with concrete options. Don't build a lot of work from a guess.
 - **Don't invent facts.** Only state what I've told you or what you can verify in the code. If unsure, ask.
 - **Quote claims back exactly.** For user-facing copy, docs and product claims, show each sentence word for word and get a yes on each. A general "yes" doesn't cover every detail.
@@ -38,4 +39,5 @@ bun run build
 ## UI work
 
 - Layouts must work at every screen size, including resized desktop windows and odd tablet sizes. Check a range of widths and heights, not only common devices.
+- Everything clickable shows the pointer hand on desktop. `web/app/globals.css` sets it for buttons and other controls; anything else made clickable needs `cursor-pointer`.
 - Text must never clip or overlap, including during animations. Check rendered text lines, not just container sizes.
