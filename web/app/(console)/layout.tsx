@@ -2,12 +2,14 @@ import type { ReactNode } from "react";
 import { cookies } from "next/headers";
 
 import { ConsoleNav } from "@/components/console/console-nav";
-import { ConsoleShell } from "@/components/console/console-shell";
+import { ConsoleFrame } from "@/components/console/console-shell";
 import { CONSOLE_NAV_COOKIE } from "@/components/console/sidebar";
+import { getQueueCount } from "@/lib/dispatch/queue-count";
 import { requireDispatcher } from "@/lib/dispatch/require-dispatcher";
 
 /**
- * The dispatcher console's guard and chrome.
+ * The dispatcher console's guard and chrome, shared by `/dispatch` and
+ * `/admin` so the sidebar stays put when moving between them.
  *
  * `requireDispatcher()` is a UX gate, not the security boundary — RLS decides
  * what a dispatcher may read, and every server action re-checks the caller
@@ -16,8 +18,6 @@ import { requireDispatcher } from "@/lib/dispatch/require-dispatcher";
  * See docs/architecture/10-auth-and-permissions.md.
  */
 
-const QUEUE_STATUSES = ["received", "needs_review"];
-
 function initialsOf(name: string | null): string {
   if (!name) return "D";
   const parts = name.trim().split(/\s+/);
@@ -25,37 +25,22 @@ function initialsOf(name: string | null): string {
   return initials.toUpperCase() || "D";
 }
 
-export default async function DispatchLayout(props: LayoutProps<"/dispatch">) {
-  const { supabase, fullName } = await requireDispatcher();
-
-  // A count, not the queue itself: the layout runs on every navigation, and the
-  // page loads the rows it actually needs.
-  const [ordersResult, inboundResult, cookieStore] = await Promise.all([
-    supabase
-      .from("orders")
-      .select("id", { count: "exact", head: true })
-      .in("status", QUEUE_STATUSES),
-    supabase
-      .from("inbound_emails")
-      .select("id", { count: "exact", head: true })
-      .eq("review_status", "pending")
-      .is("order_id", null),
+export default async function ConsoleLayout({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  const [{ fullName }, cookieStore] = await Promise.all([
+    requireDispatcher(),
     cookies(),
   ]);
 
-  const waiting = (ordersResult.count ?? 0) + (inboundResult.count ?? 0);
-
   return (
-    <ConsoleShell
-      title="Review queue"
+    <ConsoleFrame
       collapsible
+      canSignOut
       defaultCollapsed={
         cookieStore.get(CONSOLE_NAV_COOKIE)?.value === "collapsed"
-      }
-      note={
-        waiting === 0
-          ? "Nothing waiting."
-          : `${waiting} waiting · every order is verified here before the invite goes out`
       }
       user={{
         name: fullName ?? "Dispatcher",
@@ -69,14 +54,16 @@ export default async function DispatchLayout(props: LayoutProps<"/dispatch">) {
               href: "/dispatch/review",
               label: "Review queue",
               icon: "review",
-              badge: waiting,
+              // Not awaited: the badge streams in, so pages that don't show
+              // the count (admin) don't wait for it.
+              badge: getQueueCount(),
             },
-            { href: "/admin", label: "Admin users", icon: "users" },
+            { href: "/admin", label: "Users", icon: "users" },
           ]}
         />
       }
     >
-      {props.children as ReactNode}
-    </ConsoleShell>
+      {children}
+    </ConsoleFrame>
   );
 }

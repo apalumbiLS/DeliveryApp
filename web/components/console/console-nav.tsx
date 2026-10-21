@@ -3,6 +3,7 @@
 import { Inbox, Users, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Suspense, use } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -22,8 +23,11 @@ export type ConsoleNavLink = {
   label: string;
   /** Shown beside the label, and alone when the sidebar is collapsed. */
   icon: keyof typeof ICONS;
-  /** A count worth seeing without opening the page — the review queue's depth. */
-  badge?: number;
+  /**
+   * A count worth seeing without opening the page — the review queue's depth.
+   * A promise streams in without holding up the page.
+   */
+  badge?: number | Promise<number>;
 };
 
 export function ConsoleNav({ links }: { links: ConsoleNavLink[] }) {
@@ -41,7 +45,7 @@ export function ConsoleNav({ links }: { links: ConsoleNavLink[] }) {
             key={link.href}
             href={link.href}
             aria-current={active ? "page" : undefined}
-            title={link.badge ? `${link.label} (${link.badge})` : link.label}
+            title={link.label}
             className={cn(
               "flex items-center gap-2.5 rounded-control px-3 py-2 text-[12.5px] transition-colors",
               active
@@ -51,24 +55,49 @@ export function ConsoleNav({ links }: { links: ConsoleNavLink[] }) {
           >
             <span className="relative shrink-0">
               <Icon aria-hidden className="size-4" />
-              {link.badge ? (
-                <span className="absolute -top-0.5 -right-0.5 size-1.5 rounded-full bg-accent opacity-0 transition-opacity duration-200 motion-reduce:transition-none nav-collapsed:opacity-100" />
+              {link.badge !== undefined ? (
+                <Suspense>
+                  <BadgeDot badge={link.badge} />
+                </Suspense>
               ) : null}
             </span>
             <span className={SIDEBAR_FADE}>{link.label}</span>
-            {link.badge ? (
-              <span
-                className={cn(
-                  "ml-auto pl-2 text-[11px] text-ink-faint tabular-nums",
-                  SIDEBAR_FADE,
-                )}
-              >
-                {link.badge}
-              </span>
+            {link.badge !== undefined ? (
+              <Suspense>
+                <BadgeCount badge={link.badge} />
+              </Suspense>
             ) : null}
           </Link>
         );
       })}
     </nav>
+  );
+}
+
+function useBadge(badge: number | Promise<number>): number {
+  // `use` suspends until a promise settles; a plain number passes through.
+  return typeof badge === "number" ? badge : use(badge);
+}
+
+/** Marks the icon when the sidebar is collapsed and the count is hidden. */
+function BadgeDot({ badge }: { badge: number | Promise<number> }) {
+  if (!useBadge(badge)) return null;
+  return (
+    <span className="absolute -top-0.5 -right-0.5 size-1.5 rounded-full bg-accent opacity-0 transition-opacity duration-200 motion-reduce:transition-none nav-collapsed:opacity-100" />
+  );
+}
+
+function BadgeCount({ badge }: { badge: number | Promise<number> }) {
+  const count = useBadge(badge);
+  if (!count) return null;
+  return (
+    <span
+      className={cn(
+        "ml-auto pl-2 text-[11px] text-ink-faint tabular-nums",
+        SIDEBAR_FADE,
+      )}
+    >
+      {count}
+    </span>
   );
 }

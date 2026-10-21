@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useFormStatus } from "react-dom";
 
-import { setUserActive, updateUser } from "@/app/admin/actions";
+import { setUserActive, updateUser } from "@/app/(console)/admin/actions";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { USER_ROLES, userRoleLabel, type UserRole } from "@/lib/tokens";

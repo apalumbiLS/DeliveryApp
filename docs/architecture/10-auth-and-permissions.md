@@ -67,7 +67,7 @@ Middleware reads the role from the JWT claim and redirects cross-role access to 
 | Customer guard and chrome              | `web/app/portal/layout.tsx`                    |
 | Start-an-order flow (writes an intent) | `web/app/portal/start/`                        |
 | Customer mutation guard                | `web/lib/portal/require-customer.ts`           |
-| Admin guard and directory              | `web/app/admin/`                               |
+| Admin guard and directory              | `web/app/(console)/admin/`                               |
 | Privileged user operations             | `web/lib/admin/` (`users.ts`, `require-admin.ts`) |
 | Secret-key client                      | `web/lib/supabase/admin.ts`                    |
 | Role → landing page                    | `web/lib/auth/home.ts`                         |

@@ -4,7 +4,7 @@ import { SignOutButton } from "@/components/app/sign-out-button";
 import { APP_MARK } from "@/lib/brand";
 
 /**
- * The signed-in chrome shared by the customer portal and the admin console:
+ * The customer portal's signed-in chrome:
  * brand, a title block, a nav slot, and sign out.
  */
 export function AppShell({

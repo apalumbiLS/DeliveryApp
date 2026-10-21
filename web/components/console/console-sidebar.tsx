@@ -1,8 +1,11 @@
 "use client";
 
-import { ChevronsLeft } from "lucide-react";
+import { ChevronsLeft, LogOut } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
+import { useFormStatus } from "react-dom";
+
+import { signOut } from "@/app/actions/auth";
 
 import { APP_MARK } from "@/lib/brand";
 import { cn } from "@/lib/utils";
@@ -28,11 +31,13 @@ const WIDE = "(min-width: 48rem)";
 export function ConsoleSidebar({
   collapsible = false,
   defaultCollapsed = false,
+  canSignOut = false,
   user,
   children,
 }: {
   collapsible?: boolean;
   defaultCollapsed?: boolean;
+  canSignOut?: boolean;
   user: { name: string; initials: string; role: string };
   children: ReactNode;
 }) {
@@ -127,6 +132,13 @@ export function ConsoleSidebar({
             </button>
           ) : null}
 
+          {canSignOut ? (
+            // Sign-out is a mutation, so it is a form posting to a server action.
+            <form action={signOut}>
+              <SignOutRow />
+            </form>
+          ) : null}
+
           <div className="flex items-center gap-2 border-t border-hairline-soft px-1.5 pt-3">
             <div
               title={`${user.name} · ${user.role}`}
@@ -155,5 +167,24 @@ export function ConsoleSidebar({
         />
       ) : null}
     </aside>
+  );
+}
+
+function SignOutRow() {
+  const { pending } = useFormStatus();
+
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      aria-label="Sign out"
+      title="Sign out"
+      className="flex w-full items-center gap-2.5 rounded-control px-3 py-2 text-[12.5px] text-ink-muted transition-colors hover:bg-sunken hover:text-ink disabled:opacity-60"
+    >
+      <LogOut aria-hidden className="size-4 shrink-0" />
+      <span aria-hidden className={SIDEBAR_FADE}>
+        {pending ? "Signing out…" : "Sign out"}
+      </span>
+    </button>
   );
 }

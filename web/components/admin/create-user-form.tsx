@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useActionState, useState } from "react";
 
-import { createUser, type CreateUserState } from "@/app/admin/actions";
+import { createUser, type CreateUserState } from "@/app/(console)/admin/actions";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
