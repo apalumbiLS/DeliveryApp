@@ -2,6 +2,11 @@
   "name": "Delivery App",
   "build": { "dockerfile": "Dockerfile" },
 
+  // Claude Code CLI. The base image already has Node 24, so no node feature.
+  "features": {
+    "ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {}
+  },
+
   // Non-root user. The Dev Containers feature realigns its UID to the host user,
   // so bind-mounted source stays writable on Linux and macOS alike.
   "remoteUser": "node",
@@ -12,8 +17,15 @@
   "mounts": [
     "source=deliveryapp-web-node_modules,target=/workspaces/DeliveryApp/web/node_modules,type=volume",
     "source=deliveryapp-web-next,target=/workspaces/DeliveryApp/web/.next,type=volume",
-    "source=deliveryapp-bun-cache,target=/home/node/.bun/install/cache,type=volume"
+    "source=deliveryapp-bun-cache,target=/home/node/.bun/install/cache,type=volume",
+    // Claude Code's credentials and settings, so a rebuild doesn't require
+    // signing in again. Per-project via ${devcontainerId}.
+    "source=claude-code-config-${devcontainerId},target=/home/node/.claude,type=volume"
   ],
+
+  // Claude Code keeps ~/.claude.json outside ~/.claude; pointing the config
+  // directory at the volume keeps the OAuth account inside it too.
+  "containerEnv": { "CLAUDE_CONFIG_DIR": "/home/node/.claude" },
 
   // Containment option: block ALL outbound network from the container.
   // Not enabled: it breaks `bun install` and the AI agent's model calls.
