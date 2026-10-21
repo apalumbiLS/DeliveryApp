@@ -79,7 +79,9 @@ export function ConsoleSidebar({
         "shrink-0",
         collapsible
           ? cn(
-              "w-14 md:w-50 md:overflow-hidden nav-collapsed:w-14",
+              // Pinned to the viewport on wide screens, so the footer controls
+              // stay in view however long the page is.
+              "w-14 md:sticky md:top-0 md:h-dvh md:w-50 md:self-start md:overflow-hidden nav-collapsed:w-14",
               widthMotion,
             )
           : "w-50",
@@ -88,7 +90,7 @@ export function ConsoleSidebar({
       <div
         id="console-sidebar"
         className={cn(
-          "flex h-full w-full flex-col overflow-hidden border-r border-hairline bg-card-muted px-2 py-4",
+          "flex h-full w-full flex-col overflow-x-hidden overflow-y-auto border-r border-hairline bg-card-muted px-2 py-4",
           collapsible &&
             cn(
               "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-40 max-md:w-14 max-md:nav-expanded:w-50 max-md:nav-expanded:shadow-card",
