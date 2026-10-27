@@ -7,7 +7,7 @@ import { useFormStatus } from "react-dom";
 
 import { signOut } from "@/app/actions/auth";
 
-import { APP_MARK } from "@/lib/brand";
+import { TruckIcon } from "@/components/ui/icons";
 import { cn } from "@/lib/utils";
 
 import { CONSOLE_NAV_COOKIE, SIDEBAR_FADE } from "./sidebar";
@@ -100,7 +100,7 @@ export function ConsoleSidebar({
       >
         <div className="flex items-center gap-2 px-1.5 pb-6">
           <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-control bg-accent text-[11px] font-semibold text-accent-ink">
-            {APP_MARK}
+            <TruckIcon className="h-4 w-4" />
           </div>
           <span
             className={cn(

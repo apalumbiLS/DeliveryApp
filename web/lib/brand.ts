@@ -1,8 +1,5 @@
 /**
  * Product identity, in one place so the auth screens and the portal chrome
- * cannot drift apart. Placeholder until real branding lands.
+ * cannot drift apart. The brand mark is `TruckIcon` in `components/ui/icons`.
  */
-export const APP_NAME = "Delivery App";
-
-/** The letter rendered in the accent brand tile. */
-export const APP_MARK = "D";
+export const APP_NAME = "Materials Delivered";
