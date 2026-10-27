@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   lookupZipCentroid,
@@ -39,7 +39,8 @@ export function StartOrderFlow({
   sites: FlowSite[];
   stores: FlowStore[];
 }) {
-  const defaultSite = sites.find((site) => site.isDefault) ?? sites[0] ?? null;
+  // The page puts the likeliest site first (last used, then company default).
+  const defaultSite = sites[0] ?? null;
 
   const [step, setStep] = useState(0);
   const [siteMode, setSiteMode] = useState<"saved" | "new">("saved");
@@ -61,6 +62,24 @@ export function StartOrderFlow({
   useEffect(() => {
     window.scrollTo({ top: 0 });
   }, [step]);
+
+  // The footer only pins when content runs beneath it; the sentinel sits at its
+  // natural position, so while that is below the viewport the footer is stuck
+  // and gets a shadow to say there is more to scroll.
+  const footerSentinel = useRef<HTMLDivElement>(null);
+  const [footerStuck, setFooterStuck] = useState(false);
+  useEffect(() => {
+    const sentinel = footerSentinel.current;
+    if (!sentinel) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      const viewportBottom = entry.rootBounds?.bottom ?? window.innerHeight;
+      setFooterStuck(
+        !entry.isIntersecting && entry.boundingClientRect.top >= viewportBottom,
+      );
+    });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, []);
 
   // A new address has no coordinates of its own, so borrow the ZIP's. Resolved
   // once the ZIP is complete, which is what lets a new address rank stores by
@@ -338,7 +357,18 @@ export function StartOrderFlow({
         </p>
       ) : null}
 
-      <div className="mt-8 flex flex-col gap-2 border-t border-hairline-soft pt-5">
+      {/*
+       * Sticky, not fixed: it only pins when a step outgrows the screen (the new
+       * address form on a phone), and never floats over a short step. The
+       * negative margin carries the background across the page gutter so
+       * scrolled content doesn't show beside it.
+       */}
+      <div
+        className={cn(
+          "sticky bottom-0 -mx-5 mt-8 flex flex-col gap-2 border-t border-hairline-soft bg-card-muted px-5 pt-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] transition-shadow",
+          footerStuck && "shadow-footer",
+        )}
+      >
         {step < STEP_COUNT - 1 ? (
           <button
             type="button"
@@ -372,6 +402,7 @@ export function StartOrderFlow({
             : "We'll email you as soon as we read your cart."}
         </p>
       </div>
+      <div ref={footerSentinel} aria-hidden className="h-px" />
     </div>
   );
 }

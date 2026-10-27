@@ -55,8 +55,10 @@ export default async function PortalStartPage() {
   }
 
   const supabase = await createClient();
+  const { data: claims } = await supabase.auth.getClaims();
+  const userId = claims?.claims?.sub;
 
-  const [sitesResult, storesResult] = await Promise.all([
+  const [sitesResult, storesResult, recentResult] = await Promise.all([
     supabase
       .from("company_sites")
       .select(
@@ -71,6 +73,13 @@ export default async function PortalStartPage() {
       )
       .eq("active", true)
       .order("name"),
+    // Recent picks, to default to the site this person last ordered for.
+    supabase
+      .from("order_intents")
+      .select("site_id, created_by_profile_id")
+      .not("site_id", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(50),
   ]);
 
   // Every query here runs through RLS on the customer's own session, so the
@@ -89,6 +98,25 @@ export default async function PortalStartPage() {
     lng: row.lng,
     isDefault: row.is_default,
   }));
+
+  // The flow selects the first site, so the likeliest one goes to the top:
+  // this person's last pick, else anyone at the company's, else the company
+  // default (already first from the query order).
+  const recent = (recentResult.data ?? []) as unknown as {
+    site_id: string;
+    created_by_profile_id: string | null;
+  }[];
+  const siteIds = new Set(sites.map((site) => site.id));
+  const lastUsedId = (
+    recent.find(
+      (row) => row.created_by_profile_id === userId && siteIds.has(row.site_id),
+    ) ?? recent.find((row) => siteIds.has(row.site_id))
+  )?.site_id;
+  const lastUsed = sites.find((site) => site.id === lastUsedId);
+  if (lastUsed) {
+    sites.splice(sites.indexOf(lastUsed), 1);
+    sites.unshift(lastUsed);
+  }
 
   const stores: FlowStore[] = (
     (storesResult.data ?? []) as unknown as StoreRow[]

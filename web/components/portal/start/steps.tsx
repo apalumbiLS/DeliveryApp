@@ -19,6 +19,9 @@ import {
   type RankedStore,
 } from "./types";
 
+/** Sites shown before "Show all"; the likeliest one is already first. */
+const SITES_SHOWN = 3;
+
 /** The radio-card used by the site, store, and retailer lists. */
 function SelectCard({
   selected,
@@ -118,6 +121,15 @@ export function SiteStep({
   onSelectNew: () => void;
   onAddressChange: (patch: Partial<NewAddressDraft>) => void;
 }) {
+  const [showAll, setShowAll] = useState(false);
+  const selectedIndex = sites.findIndex((site) => site.id === savedSiteId);
+  // Coming back to this step with a site from further down keeps it visible.
+  const expanded =
+    showAll ||
+    sites.length <= SITES_SHOWN ||
+    (mode === "saved" && selectedIndex >= SITES_SHOWN);
+  const visibleSites = expanded ? sites : sites.slice(0, SITES_SHOWN);
+
   return (
     <div>
       <StepHeading title="Where's it going?">
@@ -125,7 +137,7 @@ export function SiteStep({
       </StepHeading>
 
       <div className="mt-4 space-y-2.5">
-        {sites.map((site) => (
+        {visibleSites.map((site) => (
           <SelectCard
             key={site.id}
             selected={mode === "saved" && savedSiteId === site.id}
@@ -134,6 +146,16 @@ export function SiteStep({
             onClick={() => onSelectSaved(site.id)}
           />
         ))}
+
+        {expanded ? null : (
+          <button
+            type="button"
+            onClick={() => setShowAll(true)}
+            className="w-full py-1.5 text-[12.5px] font-medium text-accent transition-colors hover:text-accent-hover"
+          >
+            Show all {sites.length} sites
+          </button>
+        )}
 
         <SelectCard
           dashed
