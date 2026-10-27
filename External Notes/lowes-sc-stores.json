@@ -1,0 +1,903 @@
+{
+  "source": "https://www.lowes.com/Lowes-Stores/South-Carolina/SC",
+  "sourceFile": "Lowe's Stores in South-Carolina.html",
+  "extracted": "2026-10-27",
+  "retailer": "Lowe's",
+  "state": "SC",
+  "count": 52,
+  "stores": [
+    {
+      "number": "0639",
+      "name": "Aiken Lowe's",
+      "legalName": "LOWE'S OF AIKEN, SC",
+      "street": "2470 WHISKEY RD.",
+      "city": "Aiken",
+      "state": "SC",
+      "zip": "29803",
+      "phone": "(803) 641-6565",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Aiken/0639",
+      "lat": 33.507523629325,
+      "lng": -81.710665396897
+    },
+    {
+      "number": "0728",
+      "name": "Anderson Lowe's",
+      "legalName": "LOWE'S OF ANDERSON, SC",
+      "street": "3515 CLEMSON BLVD.",
+      "city": "Anderson",
+      "state": "SC",
+      "zip": "29621",
+      "phone": "(864) 964-9228",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Anderson/0728",
+      "lat": 34.549583155233,
+      "lng": -82.674576582949
+    },
+    {
+      "number": "3050",
+      "name": "S. Anderson Lowe's",
+      "legalName": "LOWE'S OF S. ANDERSON, SC",
+      "street": "408 HIGHWAY 28 BYP",
+      "city": "Anderson",
+      "state": "SC",
+      "zip": "29626",
+      "phone": "(864) 332-3050",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Anderson/3050",
+      "lat": 34.4836568,
+      "lng": -82.662965
+    },
+    {
+      "number": "1521",
+      "name": "Beaufort Lowe's",
+      "legalName": "LOWE'S OF BEAUFORT, SC",
+      "street": "207 ROBERT SMALLS PKWY",
+      "city": "Beaufort",
+      "state": "SC",
+      "zip": "29906",
+      "phone": "(843) 522-3144",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Beaufort/1521",
+      "lat": 32.430012417485,
+      "lng": -80.718694426606
+    },
+    {
+      "number": "1533",
+      "name": "Bluffton Lowe's",
+      "legalName": "LOWE'S OF BLUFFTON, SC",
+      "street": "35 MALPHRUS ROAD",
+      "city": "Bluffton",
+      "state": "SC",
+      "zip": "29910",
+      "phone": "(843) 837-8887",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Bluffton/1533",
+      "lat": 32.224322655003,
+      "lng": -80.847565468249
+    },
+    {
+      "number": "1986",
+      "name": "Boiling Springs Lowe's",
+      "legalName": "LOWE'S OF BOILING SPRINGS, SC",
+      "street": "170 RAINBOW LAKE ROAD",
+      "city": "Boiling Springs",
+      "state": "SC",
+      "zip": "29316",
+      "phone": "(864) 573-2771",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Boiling-Springs/1986",
+      "lat": 35.050991770688,
+      "lng": -81.98421274482
+    },
+    {
+      "number": "1751",
+      "name": "Camden Lowe's",
+      "legalName": "LOWE'S OF CAMDEN, SC",
+      "street": "11 BAY LANE",
+      "city": "Camden",
+      "state": "SC",
+      "zip": "29020",
+      "phone": "(803) 572-9000",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Camden/1751",
+      "lat": 34.248784691272,
+      "lng": -80.640611665846
+    },
+    {
+      "number": "3071",
+      "name": "Clemson Lowe's",
+      "legalName": "LOWE'S OF CLEMSON, SC",
+      "street": "608 ISSAQUEENA TRAIL",
+      "city": "Central",
+      "state": "SC",
+      "zip": "29630",
+      "phone": "(864) 722-6001",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Central/3071",
+      "lat": 34.689971329573,
+      "lng": -82.788774380278
+    },
+    {
+      "number": "0655",
+      "name": "W. Ashley Lowe's",
+      "legalName": "LOWE'S OF W. ASHLEY, SC",
+      "street": "3125 GLENN MCCONNELL PKWY",
+      "city": "Charleston",
+      "state": "SC",
+      "zip": "29414",
+      "phone": "(843) 852-9099",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Charleston/0655",
+      "lat": 32.811887920808,
+      "lng": -80.047611136376
+    },
+    {
+      "number": "0661",
+      "name": "James Island Lowe's",
+      "legalName": "LOWE'S OF JAMES ISLAND, SC",
+      "street": "770 DANIEL ELLIS DR.",
+      "city": "Charleston",
+      "state": "SC",
+      "zip": "29412",
+      "phone": "(843) 795-9774",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Charleston/0661",
+      "lat": 32.749672823984,
+      "lng": -79.969248451715
+    },
+    {
+      "number": "2920",
+      "name": "N. York County Lowe's",
+      "legalName": "LOWE'S OF N. YORK COUNTY, SC",
+      "street": "5288 HIGHWAY 557",
+      "city": "Clover",
+      "state": "SC",
+      "zip": "29710",
+      "phone": "(803) 656-7000",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Clover/2920",
+      "lat": 35.119637264671,
+      "lng": -81.087036174578
+    },
+    {
+      "number": "0385",
+      "name": "Irmo Lowe's",
+      "legalName": "LOWE'S OF IRMO, SC",
+      "street": "390 HARBISON BLVD.",
+      "city": "Columbia",
+      "state": "SC",
+      "zip": "29212",
+      "phone": "(803) 749-1272",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Columbia/0385",
+      "lat": 34.07986149286,
+      "lng": -81.151049153536
+    },
+    {
+      "number": "0433",
+      "name": "N.E. Columbia Lowe's",
+      "legalName": "LOWE'S OF N.E. COLUMBIA, SC",
+      "street": "7441 TWO NOTCH ROAD",
+      "city": "Columbia",
+      "state": "SC",
+      "zip": "29223",
+      "phone": "(803) 865-1000",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Columbia/0433",
+      "lat": 34.071261679723,
+      "lng": -80.950341336451
+    },
+    {
+      "number": "1064",
+      "name": "S.E. Columbia Lowe's",
+      "legalName": "LOWE'S OF SE COLUMBIA, SC",
+      "street": "7420 GARNERS FERRY ROAD",
+      "city": "Columbia",
+      "state": "SC",
+      "zip": "29209",
+      "phone": "(803) 647-7356",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Columbia/1064",
+      "lat": 33.965374706394,
+      "lng": -80.943356101499
+    },
+    {
+      "number": "2356",
+      "name": "Richland County Lowe's",
+      "legalName": "LOWE'S OF RICHLAND COUNTY, SC",
+      "street": "10106 TWO NOTCH ROAD",
+      "city": "Columbia",
+      "state": "SC",
+      "zip": "29223",
+      "phone": "(803) 699-6000",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Columbia/2356",
+      "lat": 34.115718034897,
+      "lng": -80.886244773878
+    },
+    {
+      "number": "3026",
+      "name": "N. Richland County Lowe's",
+      "legalName": "LOWE'S OF N. RICHLAND COUNTY, SC",
+      "street": "1051 SAMS CROSSING DRIVE",
+      "city": "Columbia",
+      "state": "SC",
+      "zip": "29229",
+      "phone": "(803) 476-1320",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Columbia/3026",
+      "lat": 34.141139164692,
+      "lng": -80.94113902662
+    },
+    {
+      "number": "1705",
+      "name": "Conway Lowe's",
+      "legalName": "LOWE'S OF CONWAY, SC",
+      "street": "2301 E HIGHWAY 501",
+      "city": "Conway",
+      "state": "SC",
+      "zip": "29526",
+      "phone": "(843) 234-6033",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Conway/1705",
+      "lat": 33.794413515546,
+      "lng": -79.000027003428
+    },
+    {
+      "number": "0469",
+      "name": "Easley Lowe's",
+      "legalName": "LOWE'S OF EASLEY, SC",
+      "street": "6068 CALHOUN MEM. HWY.",
+      "city": "Easley",
+      "state": "SC",
+      "zip": "29640",
+      "phone": "(864) 306-6767",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Easley/0469",
+      "lat": 34.823890594834,
+      "lng": -82.577266790934
+    },
+    {
+      "number": "1075",
+      "name": "S. Florence Lowe's",
+      "legalName": "LOWE'S OF S FLORENCE, SC",
+      "street": "1701 FREEDOM BLVD",
+      "city": "Florence",
+      "state": "SC",
+      "zip": "29505",
+      "phone": "(843) 292-0643",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Florence/1075",
+      "lat": 34.157183679956,
+      "lng": -79.757813967344
+    },
+    {
+      "number": "1120",
+      "name": "Florence Lowe's",
+      "legalName": "LOWE'S OF FLORENCE, SC",
+      "street": "2301 DAVID H. MCLEOD BLVD.",
+      "city": "Florence",
+      "state": "SC",
+      "zip": "29501",
+      "phone": "(843) 413-9276",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Florence/1120",
+      "lat": 34.187408027563,
+      "lng": -79.814072096563
+    },
+    {
+      "number": "2442",
+      "name": "Fort Mill Lowe's",
+      "legalName": "LOWE'S OF FORT MILL, SC",
+      "street": "1640 HIGHWAY 160 WEST",
+      "city": "Fort Mill",
+      "state": "SC",
+      "zip": "29708",
+      "phone": "(803) 396-5837",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Fort-Mill/2442",
+      "lat": 35.03098906772,
+      "lng": -80.967808182517
+    },
+    {
+      "number": "2358",
+      "name": "Gaffney Lowe's",
+      "legalName": "LOWE'S OF GAFFNEY, SC",
+      "street": "1601 WEST FLOYD BAKER BLVD",
+      "city": "Gaffney",
+      "state": "SC",
+      "zip": "29341",
+      "phone": "(864) 206-7932",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Gaffney/2358",
+      "lat": 35.092463651709,
+      "lng": -81.66423110401
+    },
+    {
+      "number": "2464",
+      "name": "Goose Creek Lowe's",
+      "legalName": "LOWE'S OF GOOSE CREEK, SC",
+      "street": "520 SAINT JAMES AVENUE",
+      "city": "Goose Creek",
+      "state": "SC",
+      "zip": "29445",
+      "phone": "(843) 820-1070",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Goose-Creek/2464",
+      "lat": 33.030597268798,
+      "lng": -80.058843981004
+    },
+    {
+      "number": "1718",
+      "name": "N.W. Greenville Lowe's",
+      "legalName": "LOWE'S OF N.W. GREENVILLE, SC",
+      "street": "1900 POINSETT HIGHWAY",
+      "city": "Greenville",
+      "state": "SC",
+      "zip": "29609",
+      "phone": "(864) 248-1050",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Greenville/1718",
+      "lat": 34.892921669166,
+      "lng": -82.407760766065
+    },
+    {
+      "number": "1983",
+      "name": "Greenville Lowe's",
+      "legalName": "LOWE'S OF GREENVILLE, SC",
+      "street": "1131 WOODRUFF ROAD",
+      "city": "Greenville",
+      "state": "SC",
+      "zip": "29607",
+      "phone": "(864) 284-3970",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Greenville/1983",
+      "lat": 34.827691076468,
+      "lng": -82.300899263338
+    },
+    {
+      "number": "3640",
+      "name": "Lowe's Outlet Greenville",
+      "legalName": "LOWE'S OUTLET OF GREENVILLE, SC",
+      "street": "101 VERDAE BLVD., SUITE 200",
+      "city": "Greenville",
+      "state": "SC",
+      "zip": "29607",
+      "phone": "(864) 720-6027",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Greenville/3640",
+      "lat": 34.819671025137,
+      "lng": -82.339683093443
+    },
+    {
+      "number": "0518",
+      "name": "Greenwood Lowe's",
+      "legalName": "LOWE'S OF GREENWOOD, SC",
+      "street": "513 BYPASS 72 NW",
+      "city": "Greenwood",
+      "state": "SC",
+      "zip": "29649",
+      "phone": "(864) 229-1311",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Greenwood/0518",
+      "lat": 34.2068243,
+      "lng": -82.1887508
+    },
+    {
+      "number": "0667",
+      "name": "Greer Lowe's",
+      "legalName": "LOWE'S OF GREER, SC",
+      "street": "1370 W WADE HAMPTON BLVD",
+      "city": "Greer",
+      "state": "SC",
+      "zip": "29650",
+      "phone": "(864) 879-8448",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Greer/0667",
+      "lat": 34.938827755615,
+      "lng": -82.268814192309
+    },
+    {
+      "number": "2803",
+      "name": "Hartsville Lowe's",
+      "legalName": "LOWE'S OF HARTSVILLE, SC",
+      "street": "819 SOUTH FOURTH STREET",
+      "city": "Hartsville",
+      "state": "SC",
+      "zip": "29550",
+      "phone": "(843) 339-2501",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Hartsville/2803",
+      "lat": 34.365927902647,
+      "lng": -80.065555213162
+    },
+    {
+      "number": "3040",
+      "name": "N. Lancaster County Lowe's",
+      "legalName": "LOWE'S OF N. LANCASTER, SC",
+      "street": "181 FORT MILL HIGHWAY",
+      "city": "Indian Land",
+      "state": "SC",
+      "zip": "29707",
+      "phone": "(803) 578-4165",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Indian-Land/3040",
+      "lat": 35.001371037239,
+      "lng": -80.85894731575
+    },
+    {
+      "number": "1066",
+      "name": "Lexington Lowe's",
+      "legalName": "LOWE'S OF LEXINGTON, SC",
+      "street": "5412 SUNSET BLVD",
+      "city": "Lexington",
+      "state": "SC",
+      "zip": "29072",
+      "phone": "(803) 358-2000",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Lexington/1066",
+      "lat": 34.000512515275,
+      "lng": -81.213130270068
+    },
+    {
+      "number": "2967",
+      "name": "S.E. Lexington County Lowe's",
+      "legalName": "LOWE'S OF S.E. LEXINGTON COUNTY, SC",
+      "street": "5570 PLATT SPRINGS ROAD",
+      "city": "Lexington",
+      "state": "SC",
+      "zip": "29073",
+      "phone": "(803) 808-5460",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Lexington/2967",
+      "lat": 33.908658219546,
+      "lng": -81.217350352369
+    },
+    {
+      "number": "3576",
+      "name": "Manning",
+      "legalName": "LOWE'S OF MANNING, SC",
+      "street": "481 WEST BOYCE STREET",
+      "city": "Manning",
+      "state": "SC",
+      "zip": "29102",
+      "phone": "(803) 825-3029",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Manning/3576",
+      "lat": 33.696817553397,
+      "lng": -80.222823773243
+    },
+    {
+      "number": "0539",
+      "name": "MT. Pleasant Lowe's",
+      "legalName": "LOWE'S OF MT. PLEASANT, SC",
+      "street": "1104 MARKET CENTER BLVD.",
+      "city": "Mount Pleasant",
+      "state": "SC",
+      "zip": "29464",
+      "phone": "(843) 881-5757",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Mount-Pleasant/0539",
+      "lat": 32.8265656,
+      "lng": -79.8333129
+    },
+    {
+      "number": "3317",
+      "name": "North Mount Pleasant Lowe's",
+      "legalName": "LOWE'S OF N. MT. PLEASANT, SC",
+      "street": "3265 NORTH HIGHWAY 17",
+      "city": "Mount Pleasant",
+      "state": "SC",
+      "zip": "29466",
+      "phone": "(843) 972-6250",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Mount-Pleasant/3317",
+      "lat": 32.87083852145,
+      "lng": -79.777731490472
+    },
+    {
+      "number": "0410",
+      "name": "Myrtle Beach Lowe's",
+      "legalName": "LOWE'S OF MYRTLE BEACH, SC",
+      "street": "1160 SEABOARD ST.",
+      "city": "Myrtle Beach",
+      "state": "SC",
+      "zip": "29577",
+      "phone": "(843) 626-1700",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Myrtle-Beach/0410",
+      "lat": 33.714503269022,
+      "lng": -78.894610521326
+    },
+    {
+      "number": "1004",
+      "name": "Surfside Lowe's",
+      "legalName": "LOWE'S OF SURFSIDE, SC",
+      "street": "8672 HIGHWAY 17 BYP S",
+      "city": "Myrtle Beach",
+      "state": "SC",
+      "zip": "29588",
+      "phone": "(843) 650-1400",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Myrtle-Beach/1004",
+      "lat": 33.6464345,
+      "lng": -78.987223
+    },
+    {
+      "number": "2520",
+      "name": "Newberry Lowe's",
+      "legalName": "LOWE'S OF NEWBERRY, SC",
+      "street": "2911 MAIN STREET",
+      "city": "Newberry",
+      "state": "SC",
+      "zip": "29108",
+      "phone": "(803) 405-7061",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Newberry/2520",
+      "lat": 34.284612,
+      "lng": -81.5899329
+    },
+    {
+      "number": "2207",
+      "name": "N. Augusta Lowe's",
+      "legalName": "LOWE'S OF N. AUGUSTA, SC",
+      "street": "1220 KNOX AVENUE",
+      "city": "North Augusta",
+      "state": "SC",
+      "zip": "29841",
+      "phone": "(803) 442-4140",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-North-Augusta/2207",
+      "lat": 33.502403202972,
+      "lng": -81.959372537192
+    },
+    {
+      "number": "0497",
+      "name": "North Charleston Lowe's",
+      "legalName": "LOWE'S OF N. CHARLESTON, SC",
+      "street": "7555 NORTHWOOD BLVD.",
+      "city": "North Charleston",
+      "state": "SC",
+      "zip": "29406",
+      "phone": "(843) 572-4613",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-North-Charleston/0497",
+      "lat": 32.938237389933,
+      "lng": -80.046027336443
+    },
+    {
+      "number": "0603",
+      "name": "North Myrtle Beach Lowe's",
+      "legalName": "LOWE'S OF N MYRTLE BEACH, SC",
+      "street": "214 U.S. HWY. #17 NORTH",
+      "city": "North Myrtle Beach",
+      "state": "SC",
+      "zip": "29582",
+      "phone": "(843) 280-5182",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-North-Myrtle-Beach/0603",
+      "lat": 33.830036543616,
+      "lng": -78.677575751342
+    },
+    {
+      "number": "0559",
+      "name": "Orangeburg Lowe's",
+      "legalName": "LOWE'S OF ORANGEBURG, SC",
+      "street": "2896 NORTH ROAD HWY 178",
+      "city": "Orangeburg",
+      "state": "SC",
+      "zip": "29118",
+      "phone": "(803) 516-8488",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Orangeburg/0559",
+      "lat": 33.528246874275,
+      "lng": -80.891855619741
+    },
+    {
+      "number": "0416",
+      "name": "Rock Hill Lowe's",
+      "legalName": "LOWE'S OF ROCK HILL, SC",
+      "street": "1350 SPRINGDALE ROAD",
+      "city": "Rock Hill",
+      "state": "SC",
+      "zip": "29730",
+      "phone": "(803) 324-3170",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Rock-Hill/0416",
+      "lat": 34.938310535616,
+      "lng": -80.963448008097
+    },
+    {
+      "number": "1635",
+      "name": "Seneca Lowe's",
+      "legalName": "LOWE'S OF SENECA, SC",
+      "street": "195 BILO PLACE",
+      "city": "Seneca",
+      "state": "SC",
+      "zip": "29678",
+      "phone": "(864) 882-0218",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Seneca/1635",
+      "lat": 34.6891887,
+      "lng": -82.9845402
+    },
+    {
+      "number": "0528",
+      "name": "Simpsonville Lowe's",
+      "legalName": "LOWE'S OF SIMPSONVILLE, SC",
+      "street": "3958 GRANDVIEW DRIVE",
+      "city": "Simpsonville",
+      "state": "SC",
+      "zip": "29680",
+      "phone": "(864) 962-0671",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Simpsonville/0528",
+      "lat": 34.713741185071,
+      "lng": -82.250215208874
+    },
+    {
+      "number": "2548",
+      "name": "E. Spartanburg Lowe's",
+      "legalName": "LOWE'S OF E. SPARTANBURG, SC",
+      "street": "2079 EAST MAIN STREET",
+      "city": "Spartanburg",
+      "state": "SC",
+      "zip": "29307",
+      "phone": "(864) 596-4770",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Spartanburg/2548",
+      "lat": 34.973584337611,
+      "lng": -81.881937736342
+    },
+    {
+      "number": "2595",
+      "name": "Spartanburg Lowe's",
+      "legalName": "LOWE'S OF SPARTANBURG, SC",
+      "street": "120 E. BLACKSTOCK ROAD",
+      "city": "Spartanburg",
+      "state": "SC",
+      "zip": "29301",
+      "phone": "(864) 216-4934",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Spartanburg/2595",
+      "lat": 34.921770111452,
+      "lng": -81.98677722629
+    },
+    {
+      "number": "0358",
+      "name": "Summerville Lowe's",
+      "legalName": "LOWE'S OF SUMMERVILLE, SC",
+      "street": "1207 N. MAIN ST.",
+      "city": "Summerville",
+      "state": "SC",
+      "zip": "29483",
+      "phone": "(843) 851-0066",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Summerville/0358",
+      "lat": 33.035038231214,
+      "lng": -80.159031236217
+    },
+    {
+      "number": "2948",
+      "name": "N.W. Charleston Lowe's",
+      "legalName": "LOWE'S OF N.W. CHARLESTON, SC",
+      "street": "9600 DORCHESTER ROAD",
+      "city": "Summerville",
+      "state": "SC",
+      "zip": "29485",
+      "phone": "(843) 486-4130",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Summerville/2948",
+      "lat": 32.93642901067,
+      "lng": -80.143398141335
+    },
+    {
+      "number": "0626",
+      "name": "Sumter Lowe's",
+      "legalName": "LOWE'S OF SUMTER, SC",
+      "street": "1251 BROAD STREET",
+      "city": "Sumter",
+      "state": "SC",
+      "zip": "29150",
+      "phone": "(803) 905-2650",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-Sumter/0626",
+      "lat": 33.956862100832,
+      "lng": -80.386185421219
+    },
+    {
+      "number": "0499",
+      "name": "West Columbia Lowe's",
+      "legalName": "LOWE'S OF WEST COLUMBIA, SC",
+      "street": "2829 AUGUSTA RD",
+      "city": "West Columbia",
+      "state": "SC",
+      "zip": "29170",
+      "phone": "(803) 926-8885",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-West-Columbia/0499",
+      "lat": 33.979594051961,
+      "lng": -81.111839709546
+    },
+    {
+      "number": "1776",
+      "name": "York Lowe's",
+      "legalName": "LOWE'S OF YORK, SC",
+      "street": "1010 EAST LIBERTY ST",
+      "city": "York",
+      "state": "SC",
+      "zip": "29745",
+      "phone": "(803) 684-1548",
+      "features": [
+        "Garden Center",
+        "Dog-Friendly"
+      ],
+      "storeUrl": "https://www.lowes.com/store/SC-York/1776",
+      "lat": 34.985361873156,
+      "lng": -81.212232694313
+    }
+  ],
+  "geocoded": {
+    "date": "2026-10-27",
+    "census": 46,
+    "nominatim": 6,
+    "notes": [
+      "Coordinates geocoded from street addresses; Census TIGER (batch, 46/52) then OSM/Nominatim fallback (6/52).",
+      "Store 0539 matched in OSM as 1104 Hungry Neck Blvd and store 1004 as 8672 South Commons Dr (same house number and ZIP as the Lowe's address)."
+    ]
+  }
+}
