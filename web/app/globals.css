@@ -60,6 +60,42 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* The landing-page brand mark (components/ui/brand-lockup.tsx, `animated`). */
+@theme {
+  --animate-truck-drive-in: truck-drive-in 700ms cubic-bezier(0.22, 1, 0.36, 1)
+    both;
+  --animate-smoke-puff: smoke-puff 650ms ease-out both;
+
+  @keyframes truck-drive-in {
+    0% {
+      transform: translateX(-2.5rem);
+    }
+    65% {
+      transform: translateX(0.2rem);
+    }
+    82% {
+      transform: translateX(-0.08rem);
+    }
+    100% {
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes smoke-puff {
+    0% {
+      opacity: 0;
+      transform: translate(0, 0) scale(0.5);
+    }
+    20% {
+      opacity: 0.7;
+    }
+    100% {
+      opacity: 0;
+      transform: translate(-0.6rem, -0.5rem) scale(1.8);
+    }
+  }
+}
+
 body {
   background: var(--color-surface);
   color: var(--color-ink);

@@ -64,9 +64,6 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
       <h1 className="text-[17px] font-semibold tracking-tight text-ink">
         Sign in
       </h1>
-      <p className="mt-1 text-[12.5px] leading-relaxed text-ink-muted">
-        Use the email and password your dispatcher set up.
-      </p>
 
       <div className="mt-5">
         <LoginForm next={next} />

@@ -4,7 +4,7 @@ import type { ComponentProps } from "react";
 import { cn } from "@/lib/utils";
 
 export type ButtonIntent = "primary" | "secondary" | "ghost";
-export type ButtonSize = "sm" | "md";
+export type ButtonSize = "sm" | "md" | "lg";
 
 export const button = cva(
   "inline-flex cursor-pointer items-center justify-center gap-1.5 font-medium transition-colors disabled:pointer-events-none disabled:opacity-50",
@@ -18,6 +18,7 @@ export const button = cva(
       size: {
         sm: "rounded-control px-2.5 py-1.5 text-[11.5px]",
         md: "rounded-control px-4 py-2.5 text-[13px]",
+        lg: "rounded-control px-5 py-3.5 text-[15px]",
       } satisfies Record<ButtonSize, string>,
     },
     defaultVariants: { intent: "primary", size: "sm" },

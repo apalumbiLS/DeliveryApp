@@ -10,7 +10,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
     <main className="flex min-h-full flex-1 flex-col items-center justify-center bg-card-muted px-5 py-10">
       <div className="w-full max-w-sm">
-        <BrandLockup className="mb-6 justify-center" />
+        <BrandLockup animated className="mb-6 justify-center" />
         {children}
       </div>
     </main>
