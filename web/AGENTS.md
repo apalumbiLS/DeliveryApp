@@ -8,6 +8,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 <!-- END:nextjs-agent-rules -->
 
+## Session context
+
+- Start from `../ai_docs/_new_context_prompt.md`: read `../docs/` for the project's design and decisions, say what you plan to do before doing it, and never commit — suggest a commit and the owner makes it.
+
 ## Design system
 
 - Tokens live in `app/styles/theme.css`: layer 1 primitives, layer 2 semantic roles (`bg-surface`, `text-ink-muted`, `bg-accent`, `bg-success-bg`, …). Components use semantic roles only. Alternate themes override the semantic layer via `[data-theme]` on `<html>`.

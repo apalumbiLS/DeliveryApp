@@ -33,6 +33,7 @@ bun run build
 
 - I run the app from a CLI outside the devcontainer, never inside it. `web/.env.local` is intentionally not available in the container. Don't flag it or suggest mounting or copying env vars; give me commands to run on my machine instead.
 
+- `ai_docs/_new_context_prompt.md` is my starting prompt for a new session: read `docs/` first to get a sense of the project, and tell me what you plan to do before doing work.
 - `web/AGENTS.md` holds the app's conventions (design tokens, mockup structure, commands); `web/CLAUDE.md` imports it.
 - Schema lives at the repo root in `supabase/`. `0001_baseline.sql` is applied once per environment and frozen; every change is a new numbered file. Never edit a migration that has been applied anywhere.
 
