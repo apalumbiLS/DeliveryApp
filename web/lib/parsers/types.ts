@@ -36,6 +36,11 @@ export type ParsedItem = {
   /** Derived from `lineTotalCents / quantity`. Display only — the line total is authoritative. */
   unitPriceCents: number | null;
   imageUrl: string | null;
+  /**
+   * The retailer's link for the item, as the email carries it. Lowe's wraps it
+   * in a click-tracking redirect that lands on the product page.
+   */
+  productUrl: string | null;
   /** Store-scoped, so only meaningful against a confirmed store. */
   aisle: string | null;
   bay: string | null;

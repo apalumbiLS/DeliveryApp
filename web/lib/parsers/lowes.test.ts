@@ -64,7 +64,7 @@ describe("LowesCartParser", () => {
     }
 
     expect(outcome.retailer).toBe("lowes");
-    expect(outcome.parserVersion).toBe("lowes@1.0.0");
+    expect(outcome.parserVersion).toBe("lowes@1.1.0");
 
     // Lowe's gives an address, not a name, and the subject is generic.
     expect(outcome.cart.requesterEmail).toBe(
@@ -95,6 +95,15 @@ describe("LowesCartParser", () => {
       "https://mobileimages.lowes.com/productimages/63968777-1108-4ceb-9383-da328eda5776/102235444.jpeg",
       "https://mobileimages.lowes.com/productimages/d359a7bc-47af-4e15-b9a8-db195147ac9d/62218573.jpg",
     ]);
+
+    // Each name links through Lowe's click tracker, and each line gets its own.
+    const links = outcome.cart.items.map((item) => item.productUrl);
+    expect(
+      links.every((link) =>
+        link?.startsWith("https://click.e.lowes.com/u/?qs="),
+      ),
+    ).toBe(true);
+    expect(new Set(links).size).toBe(links.length);
   });
 
   test("invents no money, because the email states none", () => {

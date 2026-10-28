@@ -9,6 +9,9 @@ const MAX_CENTS = 10_000_000;
 
 type Result<T> = { ok: true; value: T } | { ok: false; error: string };
 
+/** What a draft save tells the form that sent it. `idle` is before any save. */
+export type DraftResult = { outcome: "idle" | "saved" | "invalid" | "error" };
+
 export type DeliveryDraft = {
   line1: string;
   line2: string | null;

@@ -72,7 +72,7 @@ const TONE_CLASSES: Record<Tone, { solid: string; bg: string; ink: string }> = {
   },
 };
 
-const INTENTS: ButtonIntent[] = ["primary", "secondary", "ghost"];
+const INTENTS: ButtonIntent[] = ["primary", "secondary", "neutral", "ghost"];
 
 const ORDER_STATUSES = Object.keys(orderStatusTone) as OrderStatus[];
 

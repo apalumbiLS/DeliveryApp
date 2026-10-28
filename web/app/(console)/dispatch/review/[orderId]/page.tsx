@@ -12,9 +12,17 @@
 
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import type { ReactNode } from "react";
 
 import { Band } from "@/components/console/band";
 import { CheckDot } from "@/components/console/check-row";
+import {
+  DeliveryEditPanel,
+  DeliveryEditProvider,
+  DeliveryEditToggle,
+} from "@/components/console/delivery-edit";
+import { DraftForm, DraftSaveButton } from "@/components/console/draft-form";
+import { IntroDialog } from "@/components/console/intro-dialog";
 import { InboundExceptionList } from "@/components/console/inbound-exception-list";
 import {
   SizePicker,
@@ -23,7 +31,7 @@ import {
 import { Td, Th } from "@/components/console/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { AlertIcon } from "@/components/ui/icons";
+import { AlertIcon, TagIcon } from "@/components/ui/icons";
 import {
   queueCheckoutInvite,
   updateOrderDelivery,
@@ -64,33 +72,6 @@ function shortAge(iso: string): string {
   if (minutes < 60 * 24) return `${Math.round(minutes / 60)}h`;
   return `${Math.round(minutes / (60 * 24))}d`;
 }
-
-const draftMessages: Record<string, { ok: boolean; text: string }> = {
-  "store-saved": { ok: true, text: "Store saved." },
-  "store-invalid": { ok: false, text: "Choose a Lowe's store before saving." },
-  "store-error": {
-    ok: false,
-    text: "Store was not saved. Refresh and try again.",
-  },
-  "delivery-saved": { ok: true, text: "Delivery details saved." },
-  "delivery-invalid": {
-    ok: false,
-    text: "Enter a complete address and on-site contact.",
-  },
-  "delivery-error": {
-    ok: false,
-    text: "Delivery details were not saved. Refresh and try again.",
-  },
-  "quote-saved": { ok: true, text: "Materials estimate and fees saved." },
-  "quote-invalid": {
-    ok: false,
-    text: "Pick a size and enter valid dollar amounts.",
-  },
-  "quote-error": {
-    ok: false,
-    text: "Pricing was not saved. Refresh and try again.",
-  },
-};
 
 function QueueRail({
   queue,
@@ -169,93 +150,207 @@ function ItemsBand({
         </Badge>
       }
     >
-      <div className="grid grid-cols-[minmax(0,20rem)_minmax(0,1fr)] gap-3">
-        <div>
-          <div className="rounded-field border border-hairline bg-card-muted px-2.5 py-2">
-            <div className="truncate text-[11.5px] font-medium">
-              {detail.email?.senderEmail ?? "Unknown sender"}
+      {/* The email column is as wide as its resizable preview; `w-0 min-w-full`
+          keeps the text around it from widening the column on its own. */}
+      <div className="@container">
+        <div className="flex flex-col gap-3 @3xl:flex-row">
+          <div className="max-w-full min-w-0 @3xl:max-w-[calc(100%-16rem)]">
+            <div className="w-0 min-w-full rounded-field border border-hairline bg-card-muted px-2.5 py-2">
+              <div className="truncate text-[11.5px] font-medium">
+                {detail.email?.senderEmail ?? "Unknown sender"}
+              </div>
+              <div className="mt-0.5 truncate text-[10.5px] text-ink-faint">
+                {detail.email?.subject ?? "no subject"}
+              </div>
             </div>
-            <div className="mt-0.5 truncate text-[10.5px] text-ink-faint">
-              {detail.email?.subject ?? "no subject"}
-            </div>
+
+            {detail.email ? (
+              // Resizable from its bottom-right corner. The strip under the frame
+              // is where that corner sits, so the drag never starts on the email.
+              <div className="mt-2 flex h-120 min-h-60 w-136 max-w-full min-w-60 resize flex-col overflow-hidden rounded-field border border-hairline bg-white">
+                {/* The sandbox is the strongest of the four layers around this
+                    HTML: no scripts, no forms, opaque origin. Links may open a
+                    new tab, outside it. The route adds a locked CSP and a
+                    sanitizer behind that. */}
+                <iframe
+                  src={`/dispatch/email/${orderId}`}
+                  sandbox="allow-popups allow-popups-to-escape-sandbox"
+                  title="The cart email, as the retailer sent it"
+                  className="min-h-0 w-full flex-1"
+                />
+                <div
+                  aria-hidden
+                  className="h-3.5 shrink-0 border-t border-hairline-soft bg-card-muted"
+                />
+              </div>
+            ) : (
+              <p className="mt-2 w-136 max-w-full rounded-field bg-warning-bg px-2.5 py-2 text-[11.5px] leading-relaxed text-warning-ink">
+                The original email is not attached to this order.
+              </p>
+            )}
           </div>
 
-          {detail.email ? (
-            // `sandbox=""` is the strongest of the four layers around this HTML:
-            // no scripts, no forms, no navigation, opaque origin. The route it
-            // points at adds a locked CSP and a sanitizer behind that.
-            <iframe
-              src={`/dispatch/email/${orderId}`}
-              sandbox=""
-              title="The cart email, as the retailer sent it"
-              className="mt-2 h-96 w-full rounded-field border border-hairline bg-white"
-            />
-          ) : (
-            <p className="mt-2 rounded-field bg-warning-bg px-2.5 py-2 text-[11.5px] leading-relaxed text-warning-ink">
-              The original email is not attached to this order.
-            </p>
-          )}
-
-          <p className="mt-1.5 text-[10.5px] leading-relaxed text-ink-faint">
-            The email as the retailer sent it, with images limited to their own
-            CDN and scripts blocked.
-          </p>
-        </div>
-
-        <div>
-          {detail.items.length === 0 ? (
-            <p className="rounded-field bg-danger-bg px-2.5 py-2 text-[11.5px] leading-relaxed text-danger-ink">
-              No lines were read from this cart.
-            </p>
-          ) : (
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-hairline-soft">
-                  <Th>Read from the email</Th>
-                  <Th className="w-12 text-right">Qty</Th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-hairline-soft">
-                {detail.items.map((item) => (
-                  <tr key={item.id}>
-                    <Td>
-                      <div className="truncate text-[12px] text-ink">
-                        {item.description}
-                      </div>
-                      <div className="mt-0.5 text-[10.5px] text-ink-faint">
-                        {item.storeSku ? `Item #${item.storeSku}` : null}
-                        {item.storeSku && item.modelNumber ? " · " : null}
-                        {item.modelNumber ? `Model #${item.modelNumber}` : null}
-                      </div>
-                    </Td>
-                    <Td className="text-right text-[12px] tabular-nums">
-                      {item.quantity}
-                    </Td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-
-          {failed && detail.parse?.reason ? (
-            <div className="mt-2 flex items-start gap-2 rounded-control bg-danger-bg px-2.5 py-2">
-              <AlertIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-danger-ink" />
-              <p className="text-[11.5px] leading-relaxed text-danger-ink">
-                {detail.parse.reason}
+          <div className="min-w-0 flex-1">
+            {detail.items.length === 0 ? (
+              <p className="rounded-field bg-danger-bg px-2.5 py-2 text-[11.5px] leading-relaxed text-danger-ink">
+                No lines were read from this cart.
               </p>
-            </div>
-          ) : (
-            <p className="mt-2 text-[11.5px] leading-relaxed text-ink-muted">
-              Lowe&apos;s prints no prices, so there is nothing to reconcile
-              against. The parser instead requires three independent counts of
-              the items to agree — which they did for this cart.
-            </p>
-          )}
+            ) : (
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-hairline-soft">
+                    <Th>Read from the email</Th>
+                    <Th className="w-12 text-right">Qty</Th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-hairline-soft">
+                  {detail.items.map((item) => (
+                    <tr key={item.id}>
+                      <Td>
+                        <div className="truncate text-[12px] text-ink">
+                          {item.productUrl ? (
+                            <a
+                              href={item.productUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="underline decoration-hairline underline-offset-2 transition-colors hover:text-accent hover:decoration-current"
+                            >
+                              {item.description}
+                            </a>
+                          ) : (
+                            item.description
+                          )}
+                        </div>
+                        <div className="mt-0.5 text-[10.5px] text-ink-faint">
+                          {item.storeSku ? `Item #${item.storeSku}` : null}
+                          {item.storeSku && item.modelNumber ? " · " : null}
+                          {item.modelNumber
+                            ? `Model #${item.modelNumber}`
+                            : null}
+                        </div>
+                      </Td>
+                      <Td className="text-right text-[12px] tabular-nums">
+                        {item.quantity}
+                      </Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+
+            {failed && detail.parse?.reason ? (
+              <div className="mt-2 flex items-start gap-2 rounded-control bg-danger-bg px-2.5 py-2">
+                <AlertIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-danger-ink" />
+                <p className="text-[11.5px] leading-relaxed text-danger-ink">
+                  {detail.parse.reason}
+                </p>
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
     </Band>
   );
 }
+
+const LOWES_PRICING_STEPS: ReactNode[] = [
+  "Empty your Lowe's cart.",
+  <>
+    Click <strong className="font-semibold">Add all to cart</strong> in the
+    email.
+  </>,
+  <>
+    Click <strong className="font-semibold">Start secure checkout</strong>.
+  </>,
+  "Enter the estimated total under Materials.",
+];
+
+function LowesPricingStepList({ stacked = false }: { stacked?: boolean }) {
+  return (
+    <ol className={stacked ? "space-y-2.5" : "flex flex-wrap gap-x-5 gap-y-2"}>
+      {LOWES_PRICING_STEPS.map((step, index) => (
+        <li
+          key={index}
+          className={cn(
+            "flex items-start leading-snug text-ink",
+            stacked ? "gap-2.5 text-[13px]" : "gap-1.5 text-[12px]",
+          )}
+        >
+          <span
+            className={cn(
+              "flex shrink-0 items-center justify-center rounded-full font-semibold text-info-ink tabular-nums ring-1 ring-info/30",
+              stacked
+                ? "h-5 w-5 bg-info-bg text-[11px]"
+                : "h-4.5 w-4.5 bg-card text-[10.5px]",
+            )}
+          >
+            {index + 1}
+          </span>
+          <span className="min-w-0">{step}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function PricingMark() {
+  return (
+    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-info text-accent-ink">
+      <TagIcon className="h-4 w-4" />
+    </div>
+  );
+}
+
+/**
+ * Lowe's emails carry no prices, so the dispatcher reads the materials cost off
+ * Lowe's own checkout. It opens as a briefing the dispatcher must dismiss, then
+ * stays first on the page for reference, because it is the one step that
+ * happens outside the console.
+ */
+function LowesPricingSteps() {
+  return (
+    <>
+      <IntroDialog
+        storageKey="materials-delivered:lowes-pricing-intro-hidden"
+        title="Price it at Lowe's"
+        icon={<PricingMark />}
+      >
+        <p className="text-[12.5px] leading-relaxed text-ink-muted">
+          Lowe&apos;s emails don&apos;t include prices, so get the materials
+          cost from Lowe&apos;s checkout.
+        </p>
+        <div className="mt-3.5">
+          <LowesPricingStepList stacked />
+        </div>
+        <p className="mt-3.5 text-[11.5px] text-ink-faint">
+          These steps stay at the top of the page.
+        </p>
+      </IntroDialog>
+
+      <section className="mb-3 flex items-start gap-3 rounded-card border border-info/30 bg-info-bg px-3.5 py-3">
+        <PricingMark />
+        <div className="min-w-0 flex-1">
+          <h2 className="text-[12.5px] font-semibold text-info-ink">
+            Price it at Lowe&apos;s
+          </h2>
+          <div className="mt-2">
+            <LowesPricingStepList />
+          </div>
+        </div>
+      </section>
+    </>
+  );
+}
+
+/** The delivery fields an order cannot go out without, as the card names them. */
+const REQUIRED_DELIVERY_FIELDS = [
+  ["line1", "street address"],
+  ["city", "city"],
+  ["state", "state"],
+  ["postalCode", "ZIP code"],
+  ["contactName", "on-site contact"],
+  ["contactPhone", "contact phone"],
+] as const;
 
 function DeliveryBand({
   detail,
@@ -265,247 +360,282 @@ function DeliveryBand({
   orderId: string;
 }) {
   const storeGate = detail.gates.find((gate) => gate.key === "store");
+  const addressGate = detail.gates.find((gate) => gate.key === "address");
+  const { fields } = detail.delivery;
+  const missing = REQUIRED_DELIVERY_FIELDS.filter(([key]) => !fields[key]).map(
+    ([, label]) => label,
+  );
 
   return (
     <Band
       title="2 · Verify the delivery & price"
       status={
-        <Badge tone={storeGate?.state === "warn" ? "warning" : "info"} bordered>
-          {storeGate?.state === "warn"
-            ? "Store looks far"
-            : detail.delivery.label
-              ? "Portal site"
-              : "Confirm delivery"}
-        </Badge>
+        storeGate?.state === "warn" ? (
+          <Badge tone="warning" bordered>
+            Store looks far
+          </Badge>
+        ) : null
       }
     >
-      <div className="grid grid-cols-[minmax(0,13rem)_minmax(0,15rem)_minmax(0,1fr)] gap-3">
-        <div>
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="text-[11.5px] font-medium text-ink-muted">
-              Deliver to
-            </span>
-            <span className="text-[10.5px] text-ink-faint">
-              {detail.delivery.label ? "portal site" : "confirm with customer"}
-            </span>
-          </div>
-          <div className="mt-1.5 rounded-field border border-hairline bg-card-muted px-2.5 py-2">
-            <div className="text-[12px] font-medium">
-              {detail.delivery.label ?? "Job site"}
+      <DeliveryEditProvider defaultOpen={addressGate?.state !== "pass"}>
+        <div className="grid grid-cols-[minmax(0,13rem)_minmax(0,15rem)_minmax(0,1fr)] gap-3">
+          <div>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[11.5px] font-medium text-ink-muted">
+                Deliver to
+              </span>
+              <DeliveryEditToggle />
             </div>
-            <div className="mt-0.5 text-[11px] leading-relaxed text-ink-muted">
-              {detail.delivery.address ?? "No address captured"}
-            </div>
-            {detail.delivery.fields.contactName ? (
-              <div className="mt-1 text-[11px] text-ink-muted">
-                {detail.delivery.fields.contactName} ·{" "}
-                {detail.delivery.fields.contactPhone}
+            <div
+              className={cn(
+                "mt-1.5 rounded-field border bg-card-muted px-2.5 py-2",
+                missing.length > 0 ? "border-warning/60" : "border-hairline",
+              )}
+            >
+              <div className="text-[12px] font-medium">
+                {detail.delivery.label ?? "Job site"}
               </div>
-            ) : null}
-            {detail.delivery.instructions ? (
-              <div className="mt-1.5 border-t border-hairline-soft pt-1.5 text-[10.5px] leading-relaxed text-ink-faint">
-                {detail.delivery.instructions}
+              <div className="mt-0.5 text-[11px] leading-relaxed text-ink-muted">
+                {detail.delivery.address ?? "No address captured"}
               </div>
-            ) : null}
-          </div>
-        </div>
-
-        <form action={updateOrderStore}>
-          <input type="hidden" name="orderId" value={orderId} />
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="text-[11.5px] font-medium text-ink-muted">
-              Store
-            </span>
-            <span className="text-[10.5px] text-ink-faint">
-              nearest if known
-            </span>
-          </div>
-
-          <div className="mt-1.5 rounded-field border border-hairline bg-card px-2.5 py-2">
-            <div className="truncate text-[12px] font-medium">
-              {detail.store?.name ?? "No store chosen"}
+              {fields.contactName ? (
+                <div className="mt-1 text-[11px] text-ink-muted">
+                  {fields.contactName} · {fields.contactPhone}
+                </div>
+              ) : null}
+              {detail.delivery.instructions ? (
+                <div className="mt-1.5 border-t border-hairline-soft pt-1.5 text-[10.5px] leading-relaxed text-ink-faint">
+                  {detail.delivery.instructions}
+                </div>
+              ) : null}
+              {missing.length > 0 ? (
+                <div className="mt-1.5 flex items-start gap-1.5 rounded-control bg-warning-bg px-2 py-1.5">
+                  <AlertIcon className="mt-0.5 h-3 w-3 shrink-0 text-warning-ink" />
+                  <p className="text-[10.5px] leading-relaxed text-warning-ink">
+                    Missing: {missing.join(", ")}
+                  </p>
+                </div>
+              ) : null}
             </div>
-            <div className="mt-0.5 flex items-center justify-between gap-2 text-[10.5px] text-ink-faint">
-              <span>{detail.store ? "selected store" : "pick one"}</span>
-              <span className="tabular-nums">
-                {detail.store?.miles != null
-                  ? formatDistance(detail.store.miles)
-                  : "—"}
+          </div>
+
+          <DraftForm
+            action={updateOrderStore}
+            savedKey={detail.store?.id ?? "none"}
+            messages={{
+              invalid: "Choose a Lowe's store before saving.",
+              error: "Store was not saved. Refresh and try again.",
+            }}
+          >
+            <input type="hidden" name="orderId" value={orderId} />
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-[11.5px] font-medium text-ink-muted">
+                Store
+              </span>
+              <span className="text-[10.5px] text-ink-faint">
+                nearest if known
               </span>
             </div>
-          </div>
 
-          <label
-            htmlFor="storeId"
-            className="mt-2 block text-[10.5px] text-ink-faint"
-          >
-            Change store
-          </label>
-          <select
-            id="storeId"
-            name="storeId"
-            defaultValue={detail.store?.id ?? ""}
-            className="mt-1 w-full rounded-control border border-hairline bg-card px-2 py-1.5 text-[11.5px] text-ink"
-          >
-            <option value="" disabled>
-              Choose a store
-            </option>
-            {detail.storeOptions.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.label ?? option.name}
-                {option.miles != null ? ` — ${option.miles.toFixed(1)} mi` : ""}
-              </option>
-            ))}
-          </select>
-
-          <Button type="submit" intent="secondary" size="sm" className="mt-2">
-            Save store
-          </Button>
-
-          {storeGate?.state === "warn" ? (
-            <div className="mt-1.5 flex items-start gap-1.5 rounded-control bg-warning-bg px-2 py-1.5">
-              <AlertIcon className="mt-0.5 h-3 w-3 shrink-0 text-warning-ink" />
-              <p className="text-[10.5px] leading-relaxed text-warning-ink">
-                {storeGate.detail}
-              </p>
+            <div className="mt-1.5 rounded-field border border-hairline bg-card px-2.5 py-2">
+              <div className="truncate text-[12px] font-medium">
+                {detail.store?.name ?? "No store chosen"}
+              </div>
+              <div className="mt-0.5 flex items-center justify-between gap-2 text-[10.5px] text-ink-faint">
+                <span>{detail.store ? "selected store" : "pick one"}</span>
+                <span className="tabular-nums">
+                  {detail.store?.miles != null
+                    ? formatDistance(detail.store.miles)
+                    : "—"}
+                </span>
+              </div>
             </div>
-          ) : null}
-        </form>
 
-        <form action={updateOrderQuote}>
-          <input type="hidden" name="orderId" value={orderId} />
-          <div className="flex items-baseline justify-between gap-2">
+            <label
+              htmlFor="storeId"
+              className="mt-2 block text-[10.5px] text-ink-faint"
+            >
+              Change store
+            </label>
+            <select
+              id="storeId"
+              name="storeId"
+              defaultValue={detail.store?.id ?? ""}
+              className="mt-1 w-full rounded-control border border-hairline bg-card px-2 py-1.5 text-[11.5px] text-ink"
+            >
+              <option value="" disabled>
+                Choose a store
+              </option>
+              {detail.storeOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label ?? option.name}
+                  {option.miles != null
+                    ? ` — ${option.miles.toFixed(1)} mi`
+                    : ""}
+                </option>
+              ))}
+            </select>
+
+            <DraftSaveButton label="Save store" className="mt-2" />
+
+            {storeGate?.state === "warn" ? (
+              <div className="mt-1.5 flex items-start gap-1.5 rounded-control bg-warning-bg px-2 py-1.5">
+                <AlertIcon className="mt-0.5 h-3 w-3 shrink-0 text-warning-ink" />
+                <p className="text-[10.5px] leading-relaxed text-warning-ink">
+                  {storeGate.detail}
+                </p>
+              </div>
+            ) : null}
+          </DraftForm>
+
+          <DraftForm
+            action={updateOrderQuote}
+            savedKey={[
+              detail.order.deliverySize,
+              detail.order.materialsCents,
+              detail.order.sizingCents,
+              detail.order.mileageCents,
+            ].join(":")}
+            messages={{
+              invalid: "Pick a size and enter valid dollar amounts.",
+              error: "Pricing was not saved. Refresh and try again.",
+            }}
+          >
+            <input type="hidden" name="orderId" value={orderId} />
             <span className="text-[11.5px] font-medium text-ink-muted">
               Delivery size
             </span>
-            <span className="text-[10.5px] text-ink-faint">sets the fee</span>
-          </div>
 
-          <div className="mt-1.5">
-            <SizePicker
-              name="deliverySize"
-              selected={
-                (detail.order.deliverySize as DeliverySize | null) ?? null
-              }
-            />
-          </div>
-
-          <div className="mt-2.5 border-t border-hairline-soft pt-1.5">
-            <div className="flex items-center justify-between gap-2 py-1">
-              <span className="text-[11.5px] text-ink-muted">
-                Materials
-                <span className="ml-1.5 text-[10.5px] text-ink-faint">
-                  Lowe&apos;s does not supply prices
-                </span>
-              </span>
-              <input
-                name="materials"
-                inputMode="decimal"
-                defaultValue={
-                  detail.order.materialsCents
-                    ? dollars(detail.order.materialsCents)
-                    : ""
+            <div className="mt-1.5">
+              <SizePicker
+                name="deliverySize"
+                selected={
+                  (detail.order.deliverySize as DeliverySize | null) ?? null
                 }
-                placeholder="Not priced"
-                className="w-20 rounded-control border border-hairline bg-card px-2 py-1 text-right text-[12px] tabular-nums"
               />
             </div>
 
-            <div className="flex items-center justify-between gap-2 py-1">
-              <span className="text-[11.5px] text-ink-muted">Sizing fee</span>
-              <input
-                name="sizing"
-                inputMode="decimal"
-                defaultValue={dollars(detail.order.sizingCents)}
-                className="w-20 rounded-control border border-hairline bg-card px-2 py-1 text-right text-[12px] tabular-nums"
-              />
+            <div className="mt-2.5 border-t border-hairline-soft pt-1.5">
+              <div className="flex items-center justify-between gap-2 py-1">
+                <span className="text-[11.5px] text-ink-muted">
+                  Materials
+                  <span className="ml-1.5 text-[10.5px] text-ink-faint">
+                    from Lowe&apos;s checkout
+                  </span>
+                </span>
+                <input
+                  name="materials"
+                  inputMode="decimal"
+                  defaultValue={
+                    detail.order.materialsCents
+                      ? dollars(detail.order.materialsCents)
+                      : ""
+                  }
+                  placeholder="Not priced"
+                  className="w-20 rounded-control border border-hairline bg-card px-2 py-1 text-right text-[12px] tabular-nums"
+                />
+              </div>
+
+              <div className="flex items-center justify-between gap-2 py-1">
+                <span className="text-[11.5px] text-ink-muted">Sizing fee</span>
+                <input
+                  name="sizing"
+                  inputMode="decimal"
+                  defaultValue={dollars(detail.order.sizingCents)}
+                  className="w-20 rounded-control border border-hairline bg-card px-2 py-1 text-right text-[12px] tabular-nums"
+                />
+              </div>
+
+              <div className="flex items-center justify-between gap-2 py-1">
+                <span className="text-[11.5px] text-ink-muted">
+                  Mileage fee
+                </span>
+                <input
+                  name="mileage"
+                  inputMode="decimal"
+                  defaultValue={dollars(detail.order.mileageCents)}
+                  className="w-20 rounded-control border border-hairline bg-card px-2 py-1 text-right text-[12px] tabular-nums"
+                />
+              </div>
+
+              <div className="mt-1 flex items-center justify-between border-t border-hairline-soft pt-1.5">
+                <span className="text-[12px] font-semibold text-ink">
+                  Total
+                </span>
+                <span className="text-[14px] font-semibold text-ink tabular-nums">
+                  {money.format(detail.order.totalCents / 100)}
+                </span>
+              </div>
+
+              <DraftSaveButton label="Save size & price" className="mt-2" />
+
+              <p className="mt-1.5 text-[10.5px] leading-relaxed text-ink-faint">
+                Fees are entered by hand until the pricing model is settled.
+              </p>
             </div>
-
-            <div className="flex items-center justify-between gap-2 py-1">
-              <span className="text-[11.5px] text-ink-muted">Mileage fee</span>
-              <input
-                name="mileage"
-                inputMode="decimal"
-                defaultValue={dollars(detail.order.mileageCents)}
-                className="w-20 rounded-control border border-hairline bg-card px-2 py-1 text-right text-[12px] tabular-nums"
-              />
-            </div>
-
-            <div className="mt-1 flex items-center justify-between border-t border-hairline-soft pt-1.5">
-              <span className="text-[12px] font-semibold text-ink">Total</span>
-              <span className="text-[14px] font-semibold text-ink tabular-nums">
-                {money.format(detail.order.totalCents / 100)}
-              </span>
-            </div>
-
-            <Button type="submit" intent="secondary" size="sm" className="mt-2">
-              Save price
-            </Button>
-
-            <p className="mt-1.5 text-[10.5px] leading-relaxed text-ink-faint">
-              Fees are entered by hand until the pricing model is settled.
-            </p>
-          </div>
-        </form>
-      </div>
-      <form
-        action={updateOrderDelivery}
-        className="mt-3 border-t border-hairline-soft pt-3"
-      >
-        <input type="hidden" name="orderId" value={orderId} />
-        <h3 className="text-[12px] font-medium text-ink">
-          Confirm delivery with the customer
-        </h3>
-        <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {(
-            [
-              ["line1", "Street address", detail.delivery.fields.line1],
-              [
-                "line2",
-                "Suite / building (optional)",
-                detail.delivery.fields.line2,
-              ],
-              ["city", "City", detail.delivery.fields.city],
-              ["state", "State", detail.delivery.fields.state],
-              ["postalCode", "ZIP code", detail.delivery.fields.postalCode],
-              [
-                "contactName",
-                "On-site contact",
-                detail.delivery.fields.contactName,
-              ],
-              [
-                "contactPhone",
-                "Contact phone",
-                detail.delivery.fields.contactPhone,
-              ],
-            ] as const
-          ).map(([name, label, value]) => (
-            <label key={name} className="text-[11px] text-ink-muted">
-              {label}
-              <input
-                name={name}
-                defaultValue={value}
-                required={name !== "line2"}
-                type={name === "contactPhone" ? "tel" : "text"}
-                className="mt-1 block w-full rounded-control border border-hairline bg-card px-2 py-1.5 text-[12px] text-ink"
-              />
-            </label>
-          ))}
-          <label className="text-[11px] text-ink-muted sm:col-span-2 lg:col-span-3">
-            Delivery instructions (optional)
-            <textarea
-              name="instructions"
-              defaultValue={detail.delivery.fields.instructions}
-              rows={2}
-              maxLength={1000}
-              className="mt-1 block w-full rounded-control border border-hairline bg-card px-2 py-1.5 text-[12px] text-ink"
-            />
-          </label>
+          </DraftForm>
         </div>
-        <Button type="submit" intent="secondary" size="sm" className="mt-2">
-          Save delivery details
-        </Button>
-      </form>
+
+        <DeliveryEditPanel>
+          <DraftForm
+            action={updateOrderDelivery}
+            savedKey={JSON.stringify(fields)}
+            messages={{
+              invalid: "Enter a complete address and on-site contact.",
+              error: "Delivery details were not saved. Refresh and try again.",
+            }}
+            className="mt-3 border-t border-hairline-soft pt-3"
+          >
+            <input type="hidden" name="orderId" value={orderId} />
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {(
+                [
+                  ["line1", "Street address", fields.line1],
+                  ["line2", "Suite / building (optional)", fields.line2],
+                  ["city", "City", fields.city],
+                  ["state", "State", fields.state],
+                  ["postalCode", "ZIP code", fields.postalCode],
+                  ["contactName", "On-site contact", fields.contactName],
+                  ["contactPhone", "Contact phone", fields.contactPhone],
+                ] as const
+              ).map(([name, label, value]) => (
+                // A required field that is still empty is `:invalid`, so the
+                // highlight clears as soon as it is filled in, before saving.
+                <label
+                  key={name}
+                  className="group text-[11px] text-ink-muted has-[:invalid]:text-warning-ink"
+                >
+                  {label}
+                  <span className="ml-1 hidden font-medium group-has-[:invalid]:inline">
+                    · missing
+                  </span>
+                  <input
+                    name={name}
+                    defaultValue={value}
+                    required={name !== "line2"}
+                    type={name === "contactPhone" ? "tel" : "text"}
+                    className="mt-1 block w-full rounded-control border border-hairline bg-card px-2 py-1.5 text-[12px] text-ink invalid:border-warning invalid:bg-warning-bg"
+                  />
+                </label>
+              ))}
+              <label className="text-[11px] text-ink-muted sm:col-span-2 lg:col-span-3">
+                Delivery instructions (optional)
+                <textarea
+                  name="instructions"
+                  defaultValue={fields.instructions}
+                  rows={2}
+                  maxLength={1000}
+                  className="mt-1 block w-full rounded-control border border-hairline bg-card px-2 py-1.5 text-[12px] text-ink"
+                />
+              </label>
+            </div>
+            <DraftSaveButton
+              label="Save delivery details"
+              className="mt-2 w-fit"
+            />
+          </DraftForm>
+        </DeliveryEditPanel>
+      </DeliveryEditProvider>
     </Band>
   );
 }
@@ -591,8 +721,6 @@ export default async function ReviewOrderPage(
   props: PageProps<"/dispatch/review/[orderId]">,
 ) {
   const { orderId } = await props.params;
-  const { draft } = await props.searchParams;
-  const feedback = typeof draft === "string" ? draftMessages[draft] : null;
   const { supabase } = await requireDispatcher();
 
   const [queue, detail, exceptions] = await Promise.all([
@@ -607,19 +735,7 @@ export default async function ReviewOrderPage(
     <div className="flex min-h-full">
       <QueueRail queue={queue} exceptions={exceptions} selectedId={orderId} />
       <div className="flex min-w-0 flex-1 flex-col px-4 py-3.5">
-        {feedback ? (
-          <p
-            role={feedback.ok ? "status" : "alert"}
-            className={cn(
-              "mb-3 rounded-field px-3 py-2 text-[12px]",
-              feedback.ok
-                ? "bg-success-bg text-success-ink"
-                : "bg-danger-bg text-danger-ink",
-            )}
-          >
-            {feedback.text}
-          </p>
-        ) : null}
+        {detail.order.retailer === "lowes" ? <LowesPricingSteps /> : null}
         <div className="space-y-3">
           <ItemsBand detail={detail} orderId={orderId} />
           <DeliveryBand detail={detail} orderId={orderId} />

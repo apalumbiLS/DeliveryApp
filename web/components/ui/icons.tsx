@@ -124,6 +124,24 @@ export function CheckIcon({ className }: { className?: string }) {
   );
 }
 
+export function TagIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden
+    >
+      <path d="M3 4.5v6.1a1.5 1.5 0 0 0 .44 1.06l8.9 8.9a1.5 1.5 0 0 0 2.12 0l6.1-6.1a1.5 1.5 0 0 0 0-2.12l-8.9-8.9A1.5 1.5 0 0 0 10.6 3H4.5A1.5 1.5 0 0 0 3 4.5Z" />
+      <path d="M7.8 7.8h.01" />
+    </svg>
+  );
+}
+
 export function AlertIcon({ className }: { className?: string }) {
   return (
     <svg

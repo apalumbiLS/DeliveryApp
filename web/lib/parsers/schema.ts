@@ -27,6 +27,9 @@ export const ParsedItemSchema = z.object({
   // Not `z.url()`. A malformed image URL is cosmetic, and failing a whole cart
   // over one would turn a good order into a review-queue entry.
   imageUrl: z.string().nullable(),
+  // Defaulted rather than required: parse output stored before the field
+  // existed is validated again when a provisional email is finalized.
+  productUrl: z.string().nullable().default(null),
   aisle: z.string().nullable(),
   bay: z.string().nullable(),
 });

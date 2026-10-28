@@ -10,6 +10,7 @@
  *     dispatcher enters the materials cost by hand.
  *   - **No store, no aisle, no cart URL.** The only links are click-tracking
  *     redirects. The store comes from the customer's order intent (ADR-0010).
+ *     Each item's redirect is kept anyway, so the review queue can link to it.
  *   - **No requester name.** The body says `Sent from the cart of <address>`,
  *     and the subject is generic.
  *
@@ -30,13 +31,31 @@ import type {
 } from "./types";
 
 const RETAILER = "lowes" as const;
-const VERSION = "lowes@1.0.0";
+const VERSION = "lowes@1.1.0";
 
 /** Observed sender is `lowes@e.lowes.com`; the reply-to is also on this domain. */
 const SENDER_PARENT_DOMAIN = "lowes.com";
 
 /** Product images. `image.e.lowes.com` holds logos and spacer gifs, not products. */
 const PRODUCT_IMAGE_HOST = "mobileimages.lowes.com";
+
+/**
+ * An item link, kept only when it is HTTPS on Lowe's own domain. The review
+ * queue renders it outside the email's sandbox, so it is held to more than
+ * "the email said so".
+ */
+function lowesLink(href: string | undefined): string | null {
+  if (!href) return null;
+  try {
+    const url = new URL(href);
+    return url.protocol === "https:" &&
+      isDomainOrSubdomainOf(url.hostname, SENDER_PARENT_DOMAIN)
+      ? url.toString()
+      : null;
+  } catch {
+    return null;
+  }
+}
 
 export const lowesCartParser: CartParser = {
   retailer: RETAILER,
@@ -80,12 +99,9 @@ export const lowesCartParser: CartParser = {
 
       // The name is the only `<strong>` inside an anchor. `Quantity 3` is also
       // a `<strong>`, so this matches by structure, never by tag alone.
-      const description = $scope
-        .find("a strong")
-        .first()
-        .text()
-        .replace(/\s+/g, " ")
-        .trim();
+      const $name = $scope.find("a strong").first();
+      const description = $name.text().replace(/\s+/g, " ").trim();
+      const productUrl = lowesLink($name.closest("a").attr("href"));
 
       const storeSku = text.match(/Item:\s*#([^|\s]+)/)?.[1] ?? null;
       const modelNumber = text.match(/Model:\s*#([^\s|]+)/)?.[1] ?? null;
@@ -116,6 +132,7 @@ export const lowesCartParser: CartParser = {
         lineTotalCents: null,
         unitPriceCents: null,
         imageUrl: $image.attr("src") ?? null,
+        productUrl,
         aisle: null,
         bay: null,
       });

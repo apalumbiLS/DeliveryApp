@@ -13,6 +13,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { distanceMiles, type Point } from "@/lib/geo";
 import { resolveRecipient } from "@/lib/intake/resolve-recipient";
+import { selectParser } from "@/lib/parsers";
 import { isRetailerId, RETAILERS } from "@/lib/retailers";
 
 import { deliveryFields } from "./draft-input";
@@ -42,6 +43,8 @@ export type QueueItemRow = {
   storeSku: string | null;
   quantity: number;
   imageUrl: string | null;
+  /** The retailer's link for the item, from the original email. */
+  productUrl: string | null;
 };
 
 export type StoreOption = {
@@ -252,7 +255,7 @@ export async function loadOrderDetail(
       order.inbound_email_id
         ? supabase
             .from("inbound_emails")
-            .select("id, sender_email, subject, received_at")
+            .select("id, sender_email, subject, received_at, body_html")
             .eq("id", order.inbound_email_id)
             .maybeSingle()
         : Promise.resolve({ data: null }),
@@ -303,6 +306,14 @@ export async function loadOrderDetail(
     sitePoint,
   );
 
+  const links = productLinks(
+    emailResult.data as {
+      sender_email: string;
+      subject: string | null;
+      body_html: string | null;
+    } | null,
+  );
+
   const items = (
     (itemsResult.data ?? []) as {
       id: string;
@@ -321,6 +332,7 @@ export async function loadOrderDetail(
     storeSku: row.store_sku,
     quantity: row.quantity,
     imageUrl: row.image_url,
+    productUrl: row.store_sku ? (links.get(row.store_sku) ?? null) : null,
   }));
 
   const nearestMiles = alternatives.reduce<number | null>(
@@ -397,6 +409,38 @@ export async function loadOrderDetail(
     alternatives,
     gates,
   };
+}
+
+/**
+ * Item links, read again from the stored email.
+ *
+ * `order_items` has no column for them, and reading them back from the original
+ * means orders parsed before the parser kept links show them too. Keyed by the
+ * retailer's item number rather than line position.
+ */
+function productLinks(
+  email: {
+    sender_email: string;
+    subject: string | null;
+    body_html: string | null;
+  } | null,
+): Map<string, string> {
+  const links = new Map<string, string>();
+  if (!email?.body_html) return links;
+
+  const result = selectParser(email.sender_email)?.parse({
+    bodyHtml: email.body_html,
+    subject: email.subject,
+    senderEmail: email.sender_email,
+  });
+  if (!result?.ok) return links;
+
+  for (const item of result.data.items) {
+    if (item.storeSku && item.productUrl) {
+      links.set(item.storeSku, item.productUrl);
+    }
+  }
+  return links;
 }
 
 async function loadParseAttempt(

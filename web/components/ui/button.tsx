@@ -3,7 +3,7 @@ import type { ComponentProps } from "react";
 
 import { cn } from "@/lib/utils";
 
-export type ButtonIntent = "primary" | "secondary" | "ghost";
+export type ButtonIntent = "primary" | "secondary" | "neutral" | "ghost";
 export type ButtonSize = "sm" | "md" | "lg";
 
 export const button = cva(
@@ -12,7 +12,11 @@ export const button = cva(
     variants: {
       intent: {
         primary: "bg-accent text-accent-ink hover:bg-accent-hover",
-        secondary: "border border-hairline bg-card text-ink hover:bg-card-muted",
+        secondary:
+          "border border-hairline bg-card text-ink hover:bg-card-muted",
+        // Filled grey: a save beside the fields it saves. Easy to find, but it
+        // never competes with the page's one primary action.
+        neutral: "bg-sunken text-ink hover:bg-hairline",
         ghost: "text-ink-muted hover:bg-sunken hover:text-ink",
       } satisfies Record<ButtonIntent, string>,
       size: {

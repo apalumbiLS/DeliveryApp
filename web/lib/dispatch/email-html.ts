@@ -13,8 +13,11 @@
  *      retailer's layout is the whole reason for showing the email; everything
  *      else — fonts, frames, scripts, tracking pixels — is refused.
  *   3. `X-Content-Type-Options: nosniff`.
- *   4. It is embedded in `<iframe sandbox="">`, which is the strongest of the
- *      four: no scripts, no forms, no navigation, opaque origin.
+ *   4. It is embedded in a sandboxed `<iframe>`, which is the strongest of the
+ *      four: no scripts, no forms, opaque origin. An order's preview also lets
+ *      a link open in a new tab, because the dispatcher prices the cart by
+ *      clicking through to Lowe's. The inbound preview, for mail not yet
+ *      approved into an order, does not.
  *
  * The sanitizer below is the innermost layer. It is redundant given the other
  * three, which is the point — it is the one that holds if a header is ever
@@ -119,6 +122,19 @@ const SANITIZE_OPTIONS: sanitizeHtml.IOptions = {
   // Drop a disallowed tag but keep its text, so stripping one element does not
   // blank out a line of the cart.
   disallowedTagsMode: "discard",
+  // `<style>` is allowed and sanitize-html does not clean what is inside it, so
+  // it warns. Lowe's needs the blocks: they hold its mobile and desktop layout.
+  // What CSS could do is fenced by the other layers — the sandbox and the CSP
+  // block scripts, and the CSP limits fetches to the image hosts above.
+  allowVulnerableTags: true,
+  // Every link opens a new tab, so Lowe's loads in a normal tab rather than
+  // inside the preview.
+  transformTags: {
+    a: (tagName, attribs) => ({
+      tagName,
+      attribs: { ...attribs, target: "_blank", rel: "noopener noreferrer" },
+    }),
+  },
   parser: { lowerCaseTags: true },
 };
 

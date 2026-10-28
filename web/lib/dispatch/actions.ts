@@ -10,6 +10,7 @@ import {
   parseDeliveryDraft,
   parseQuoteDraft,
   saveDispatcherDraft,
+  type DraftResult,
 } from "./draft-input";
 import { canQueueInvite, CHECKOUT_INVITES_ENABLED } from "./invite";
 import { requireDispatcher } from "./require-dispatcher";
@@ -18,41 +19,49 @@ import { loadOrderDetail } from "./review-queue";
 /**
  * Dispatcher edits are checked and audited in one database call. A server action
  * can be invoked directly, so its form fields are never authorization evidence.
+ *
+ * Each returns its outcome to the form that sent it rather than redirecting, so
+ * the form can say "Saved" or name the problem beside its own button.
  */
-function finishDraftUpdate(
-  orderId: string,
-  kind: "store" | "delivery" | "quote",
-  outcome: "saved" | "invalid" | "error",
-): never {
-  const path = `/dispatch/review/${orderId}`;
-  if (outcome === "saved") {
-    revalidatePath(path);
-    revalidatePath("/dispatch/review");
-  }
-  redirect(`${path}?draft=${kind}-${outcome}`);
+function finishDraftUpdate(orderId: string, saved: boolean): DraftResult {
+  if (!saved) return { outcome: "error" };
+  revalidatePath(`/dispatch/review/${orderId}`);
+  revalidatePath("/dispatch/review");
+  return { outcome: "saved" };
 }
 
-export async function updateOrderStore(formData: FormData): Promise<void> {
-  const { supabase } = await requireDispatcher();
+function orderIdFrom(formData: FormData): string | null {
   const orderId = String(formData.get("orderId") ?? "");
-  if (!/^[0-9a-f-]{36}$/i.test(orderId)) return;
+  return /^[0-9a-f-]{36}$/i.test(orderId) ? orderId : null;
+}
+
+export async function updateOrderStore(
+  _previous: DraftResult,
+  formData: FormData,
+): Promise<DraftResult> {
+  const { supabase } = await requireDispatcher();
+  const orderId = orderIdFrom(formData);
+  if (!orderId) return { outcome: "error" };
   const storeId = String(formData.get("storeId") ?? "");
-  if (!storeId) finishDraftUpdate(orderId, "store", "invalid");
+  if (!storeId) return { outcome: "invalid" };
 
   // A store belongs to this order only when its retailer matches; the RPC
   // validates that association again under the dispatcher's own RLS session.
   const saved = await saveDispatcherDraft(supabase, orderId, "store", {
     storeId,
   });
-  finishDraftUpdate(orderId, "store", saved ? "saved" : "error");
+  return finishDraftUpdate(orderId, saved);
 }
 
-export async function updateOrderQuote(formData: FormData): Promise<void> {
+export async function updateOrderQuote(
+  _previous: DraftResult,
+  formData: FormData,
+): Promise<DraftResult> {
   const { supabase } = await requireDispatcher();
-  const orderId = String(formData.get("orderId") ?? "");
-  if (!/^[0-9a-f-]{36}$/i.test(orderId)) return;
+  const orderId = orderIdFrom(formData);
+  if (!orderId) return { outcome: "error" };
   const draft = parseQuoteDraft(formData);
-  if (!draft.ok) finishDraftUpdate(orderId, "quote", "invalid");
+  if (!draft.ok) return { outcome: "invalid" };
 
   const saved = await saveDispatcherDraft(
     supabase,
@@ -60,15 +69,18 @@ export async function updateOrderQuote(formData: FormData): Promise<void> {
     "quote",
     draft.value,
   );
-  finishDraftUpdate(orderId, "quote", saved ? "saved" : "error");
+  return finishDraftUpdate(orderId, saved);
 }
 
-export async function updateOrderDelivery(formData: FormData): Promise<void> {
+export async function updateOrderDelivery(
+  _previous: DraftResult,
+  formData: FormData,
+): Promise<DraftResult> {
   const { supabase } = await requireDispatcher();
-  const orderId = String(formData.get("orderId") ?? "");
-  if (!/^[0-9a-f-]{36}$/i.test(orderId)) return;
+  const orderId = orderIdFrom(formData);
+  if (!orderId) return { outcome: "error" };
   const draft = parseDeliveryDraft(formData);
-  if (!draft.ok) finishDraftUpdate(orderId, "delivery", "invalid");
+  if (!draft.ok) return { outcome: "invalid" };
 
   const saved = await saveDispatcherDraft(
     supabase,
@@ -76,7 +88,7 @@ export async function updateOrderDelivery(formData: FormData): Promise<void> {
     "delivery",
     draft.value,
   );
-  finishDraftUpdate(orderId, "delivery", saved ? "saved" : "error");
+  return finishDraftUpdate(orderId, saved);
 }
 
 /**
