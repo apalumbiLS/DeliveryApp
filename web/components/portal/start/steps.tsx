@@ -1,17 +1,18 @@
 "use client";
 
+import { Check, CirclePlay } from "lucide-react";
 import { useState } from "react";
 
-import { Button } from "@/components/ui/button";
+import { button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Field } from "@/components/ui/field";
-import { CopyIcon, ImageIcon } from "@/components/ui/icons";
+import { CopyIcon, ExternalLinkIcon } from "@/components/ui/icons";
 import { Input } from "@/components/ui/input";
 import { formatDistance } from "@/lib/geo";
 import { RETAILERS, type RetailerId } from "@/lib/retailers";
 import { cn } from "@/lib/utils";
 
-import { StoreDiagram } from "./store-diagram";
+import { FinishTutorial } from "./finish-tutorial";
 import {
   formatAddress,
   type FlowSite,
@@ -378,7 +379,7 @@ export function StoreStep({
       <button
         type="button"
         onClick={() => setPicking((open) => !open)}
-        className="mt-2.5 cursor-pointer text-[12.5px] font-medium text-accent"
+        className="mt-2.5 cursor-pointer text-[12.5px] font-medium text-accent transition-colors hover:text-accent-hover"
       >
         {picking ? "Hide other stores" : "Choose another store"}
       </button>
@@ -417,11 +418,6 @@ export function StoreStep({
 
           {visible.length > 0 ? (
             <p className="px-1 text-[11.5px] leading-relaxed text-ink-faint">
-              {query
-                ? `${filtered.length} of ${ranked.length} match “${filter.trim()}”. `
-                : hasCoordinates
-                  ? `Showing the ${visible.length} closest of ${ranked.length}. `
-                  : `Showing ${visible.length} of ${ranked.length}. `}
               Not seeing your store? Get in touch and we&apos;ll add it.
             </p>
           ) : null}
@@ -431,39 +427,37 @@ export function StoreStep({
   );
 }
 
-export function CheckStoreStep({
-  retailerId,
-  store,
-  onChangeStore,
-}: {
-  retailerId: RetailerId;
-  store: RankedStore;
-  onChangeStore: () => void;
-}) {
-  const retailer = RETAILERS[retailerId];
+/**
+ * Per device, not per account: a pilot shortcut that needs no migration. Someone
+ * switching from phone to computer sees the explainer once more.
+ */
+const EXPLAINER_HIDDEN_KEY = "materials-delivered:finish-explainer-hidden";
 
-  return (
-    <div>
-      <StepHeading title="Check your store">
-        We&apos;re buying from {store.store.name}. But {retailer.label} has its
-        own store setting, and that&apos;s what decides the prices, stock, and
-        aisles you&apos;ll see while you build your cart.
-      </StepHeading>
-
-      <button
-        type="button"
-        onClick={onChangeStore}
-        className="mt-2 cursor-pointer text-[12.5px] font-medium text-accent transition-colors hover:text-accent-hover"
-      >
-        Change store
-      </button>
-
-      <StoreDiagram retailerId={retailerId} store={store.store} />
-    </div>
-  );
+function readExplainerHidden() {
+  try {
+    return window.localStorage.getItem(EXPLAINER_HIDDEN_KEY) === "1";
+  } catch {
+    return false;
+  }
 }
 
-export function BuildShareStep({
+function writeExplainerHidden(hidden: boolean) {
+  try {
+    if (hidden) window.localStorage.setItem(EXPLAINER_HIDDEN_KEY, "1");
+    else window.localStorage.removeItem(EXPLAINER_HIDDEN_KEY);
+  } catch {
+    // Storage can be blocked; they'll just see the explainer next time.
+  }
+}
+
+/**
+ * The last step. The tutorial opens over it the first time, to show what to do
+ * on the retailer's site; repeat customers can turn that off. Underneath are
+ * the actions: copy the address, and only then open the store — so the
+ * address is on the clipboard before they leave, and nobody jumps to the
+ * retailer unbriefed.
+ */
+export function FinishStep({
   retailerId,
   store,
   alias,
@@ -472,7 +466,14 @@ export function BuildShareStep({
   store: RankedStore;
   alias: string | null;
 }) {
-  const [copied, setCopied] = useState(false);
+  // Only rendered after the customer reaches the last step, never on the
+  // server, so reading storage in the initializer can't mismatch hydration.
+  const [tutorialOpen, setTutorialOpen] = useState(
+    () => !readExplainerHidden(),
+  );
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">(
+    "idle",
+  );
   const retailer = RETAILERS[retailerId];
 
   async function copy() {
@@ -480,65 +481,105 @@ export function BuildShareStep({
 
     try {
       await navigator.clipboard.writeText(alias);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
+      setCopyState("copied");
     } catch {
-      // Clipboard access can be denied; the address is on screen to copy by
-      // hand, so this is not worth an error state.
+      // Clipboard access can be denied. The address is on screen to copy by
+      // hand, and the store button still appears so nobody is stuck.
+      setCopyState("failed");
     }
   }
 
   return (
     <div>
-      <StepHeading title="Build & share your cart">
-        Add everything you need — but don&apos;t check out. The cart is your
-        request to us. Then tap Share Cart and paste this address:
-      </StepHeading>
-
-      {alias ? (
-        <div className="mt-3 flex items-center justify-between gap-2 rounded-field border border-hairline bg-card px-3 py-2.5">
-          <span className="truncate font-mono text-[12px] text-ink">
-            {alias}
-          </span>
-          <Button type="button" onClick={copy}>
-            <CopyIcon className="h-3.5 w-3.5" />
-            {copied ? "Copied" : "Copy"}
-          </Button>
-        </div>
-      ) : (
-        <>
-          <p className="mt-3 rounded-field bg-warning-bg px-3 py-2 text-[12.5px] leading-relaxed text-warning-ink">
-            We don&apos;t have an order address set up yet. Get in touch and
-            we&apos;ll sort it out before you build your cart.
-          </p>
-        </>
-      )}
-
-      {alias ? (
-        <p className="mt-2 text-[11.5px] leading-relaxed text-ink-muted">
-          This address is for this cart. Sharing a different cart to it starts a
-          new request without reusing this job site or store.
-        </p>
+      {tutorialOpen ? (
+        <FinishTutorial
+          retailerId={retailerId}
+          initialHide={readExplainerHidden()}
+          onClose={() => setTutorialOpen(false)}
+          onGotIt={(hide) => {
+            writeExplainerHidden(hide);
+            setTutorialOpen(false);
+          }}
+        />
       ) : null}
 
-      <figure className="mt-3">
-        <div className="flex h-40 items-center justify-center gap-2 rounded-field border border-dashed border-hairline bg-sunken/60 text-ink-faint">
-          <ImageIcon className="h-4 w-4" />
-          <span className="text-[11px] font-medium tracking-widest uppercase">
-            Screenshot
-          </span>
-        </div>
-        <figcaption className="mt-2 text-[11.5px] leading-relaxed text-ink-muted">
-          The Share Cart button, inside your cart on the {retailer.label}{" "}
-          website. We&apos;ll drop a picture in once we have one from the
-          retailer.
-        </figcaption>
-      </figure>
+      <StepHeading title={`Finish on ${retailer.label}`} />
 
-      <p className="mt-4 text-[11.5px] leading-relaxed text-ink-faint">
-        Our dispatcher will review your cart and confirm the missing details
-        before anyone buys from {store.store.name}.
-      </p>
+      {alias ? (
+        <div className="mt-5">
+          <p className="text-[12.5px] text-ink-muted">
+            You&apos;ll paste this as the recipient
+          </p>
+          <p className="mt-2 rounded-field border border-hairline bg-card px-3 py-2.5 font-mono text-[13px] break-all text-ink select-all">
+            {alias}
+          </p>
+
+          <div className="mt-4 flex flex-col gap-2.5 sm:flex-row">
+            <button
+              type="button"
+              onClick={copy}
+              className={cn(
+                button({
+                  intent: copyState === "idle" ? "primary" : "secondary",
+                  size: "lg",
+                }),
+                "w-full sm:w-auto",
+              )}
+            >
+              {copyState === "copied" ? (
+                <>
+                  <Check className="h-4 w-4" aria-hidden />
+                  Copied
+                </>
+              ) : (
+                <>
+                  <CopyIcon className="h-4 w-4" />
+                  Copy address
+                </>
+              )}
+            </button>
+
+            {copyState === "idle" ? null : (
+              <a
+                href={store.store.storeUrl ?? retailer.homeUrl}
+                target="_blank"
+                rel="noreferrer"
+                className={cn(
+                  button({ intent: "primary", size: "lg" }),
+                  "w-full justify-between sm:w-auto",
+                )}
+              >
+                Open {store.store.name}
+                <ExternalLinkIcon className="h-4 w-4" />
+              </a>
+            )}
+          </div>
+
+          {copyState === "failed" ? (
+            <p className="mt-2 text-[12.5px] text-warning-ink">
+              Couldn&apos;t copy. Copy the address by hand.
+            </p>
+          ) : null}
+        </div>
+      ) : (
+        <p className="mt-5 rounded-field bg-warning-bg px-3 py-2 text-[12.5px] leading-relaxed text-warning-ink">
+          We don&apos;t have an order address set up yet. Get in touch and
+          we&apos;ll sort it out before you build your cart.
+        </p>
+      )}
+
+      {/* Well away from the buttons, and quiet: a way back to the tutorial,
+          not a next step. */}
+      <div className="mt-12 flex justify-end">
+        <button
+          type="button"
+          onClick={() => setTutorialOpen(true)}
+          className="flex items-center gap-1.5 text-[12px] text-ink-faint transition-colors hover:text-ink-muted"
+        >
+          <CirclePlay className="h-3.5 w-3.5" aria-hidden />
+          How it works
+        </button>
+      </div>
     </div>
   );
 }

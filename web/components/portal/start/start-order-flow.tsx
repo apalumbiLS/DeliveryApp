@@ -8,18 +8,12 @@ import {
   type IntentInput,
 } from "@/app/portal/start/actions";
 import { button } from "@/components/ui/button";
-import { Chevron, ExternalLinkIcon } from "@/components/ui/icons";
+import { Chevron } from "@/components/ui/icons";
 import { distanceMiles, normalizeZip } from "@/lib/geo";
-import { RETAILER_IDS, RETAILERS, type RetailerId } from "@/lib/retailers";
+import { RETAILER_IDS, type RetailerId } from "@/lib/retailers";
 import { cn } from "@/lib/utils";
 
-import {
-  BuildShareStep,
-  CheckStoreStep,
-  RetailerStep,
-  SiteStep,
-  StoreStep,
-} from "./steps";
+import { FinishStep, RetailerStep, SiteStep, StoreStep } from "./steps";
 import {
   EMPTY_ADDRESS,
   formatAddress,
@@ -30,7 +24,7 @@ import {
   type RankedStore,
 } from "./types";
 
-const STEP_COUNT = 5;
+const STEP_COUNT = 4;
 
 export function StartOrderFlow({
   sites,
@@ -179,7 +173,6 @@ export function StartOrderFlow({
     activeRetailerId !== null,
     activeStoreId !== null,
     true,
-    true,
   ][step];
 
   function clearIntent() {
@@ -191,7 +184,7 @@ export function StartOrderFlow({
     setError(null);
 
     if (intentId && intentAddress) {
-      setStep(4);
+      setStep(3);
       return;
     }
 
@@ -229,11 +222,13 @@ export function StartOrderFlow({
 
     setIntentId(result.intentId);
     setIntentAddress(result.orderAddress);
-    setStep(4);
+    setStep(3);
   }
 
   function next() {
-    if (step === 3) {
+    // Leaving the store step saves the intent, which is what mints the
+    // address the last step hands out.
+    if (step === 2) {
       void saveAndAdvance();
       return;
     }
@@ -329,18 +324,7 @@ export function StartOrderFlow({
         ) : null}
 
         {step === 3 && activeRetailerId && activeEntry ? (
-          <CheckStoreStep
-            retailerId={activeRetailerId}
-            store={activeEntry}
-            onChangeStore={() => {
-              setError(null);
-              setStep(2);
-            }}
-          />
-        ) : null}
-
-        {step === 4 && activeRetailerId && activeEntry ? (
-          <BuildShareStep
+          <FinishStep
             retailerId={activeRetailerId}
             store={activeEntry}
             alias={intentId ? intentAddress : null}
@@ -361,47 +345,30 @@ export function StartOrderFlow({
        * Sticky, not fixed: it only pins when a step outgrows the screen (the new
        * address form on a phone), and never floats over a short step. The
        * negative margin carries the background across the page gutter so
-       * scrolled content doesn't show beside it.
+       * scrolled content doesn't show beside it. The last step has no footer:
+       * its actions are in its checklist.
        */}
-      <div
-        className={cn(
-          "sticky bottom-0 -mx-5 mt-8 flex flex-col gap-2 border-t border-hairline-soft bg-card-muted px-5 pt-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] transition-shadow",
-          footerStuck && "shadow-footer",
-        )}
-      >
-        {step < STEP_COUNT - 1 ? (
+      {step < STEP_COUNT - 1 ? (
+        <div
+          className={cn(
+            "sticky bottom-0 -mx-5 mt-8 flex flex-col gap-2 border-t border-hairline-soft bg-card-muted px-5 pt-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] transition-shadow",
+            footerStuck && "shadow-footer",
+          )}
+        >
           <button
             type="button"
             onClick={next}
             disabled={!canContinue || saving}
             className={cn(button({ intent: "primary", size: "md" }), "w-full")}
           >
-            {saving
-              ? "Saving…"
-              : step === 3
-                ? "Next: build & share"
-                : "Continue"}
+            {saving ? "Saving…" : "Continue"}
           </button>
-        ) : activeRetailerId && activeEntry ? (
-          <a
-            href={
-              activeEntry.store.storeUrl ?? RETAILERS[activeRetailerId].homeUrl
-            }
-            target="_blank"
-            rel="noreferrer"
-            className={cn(button({ intent: "primary", size: "md" }), "w-full")}
-          >
-            Open the {RETAILERS[activeRetailerId].label} website
-            <ExternalLinkIcon className="h-3.5 w-3.5" />
-          </a>
-        ) : null}
 
-        <p className="text-center text-[11.5px] leading-relaxed text-ink-faint">
-          {step < STEP_COUNT - 1
-            ? "Nothing is ordered until you approve the price."
-            : "We'll email you as soon as we read your cart."}
-        </p>
-      </div>
+          <p className="text-center text-[11.5px] leading-relaxed text-ink-faint">
+            Nothing is ordered until you approve the price.
+          </p>
+        </div>
+      ) : null}
       <div ref={footerSentinel} aria-hidden className="h-px" />
     </div>
   );
