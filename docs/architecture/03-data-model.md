@@ -137,7 +137,7 @@ Seeded store list. The dispatcher picks from here — this is the only source of
 | `phone`                                         | text                          |                                     |
 | `hours`                                         | jsonb                         |                                     |
 | `store_url`                                     | text                          | Verified store page (ADR-0010). Null → the portal falls back to the retailer's homepage |
-| `store_label`                                   | text                          | The retailer's own wording for the store, shown in "Check your store" |
+| `store_label`                                   | text                          | The retailer's own wording for the store; searchable in the portal's store picker and used in the dispatcher's store options |
 | `active`                                        | boolean NOT NULL DEFAULT true |                                     |
 |                                                 |                               | UNIQUE (`retailer`, `store_number`) |
 
@@ -465,7 +465,9 @@ Reference rows that every environment needs (the `retailer_stores` list) live in
 
 `supabase/seed/0002_zip_centroids.sql` is **reference** data rather than demo data: 1,620 ZIP centroids for North and South Carolina, generated from `External Notes/ZIPGOLD.csv` (2011 vintage). It is scoped to the service area so the file stays small enough to apply through the SQL editor; a ZIP outside those states is a miss, which the flow handles. It is idempotent and corrective as well, so a newer source file can be dropped in and applied the same way.
 
+`supabase/seed/0003_sc_stores.sql` is **reference** data too: the 52 South Carolina Lowe's stores from `External Notes/lowes-sc-stores.json` (with `store_url` and `store_label`). It holds stores only — no demo rows — so it can be applied to a deployed environment through the SQL editor. Same upsert on `(retailer, store_number)` as the dev seed, so it is safe to re-run.
+
 There is still no Home Depot list, so the seeded stores are Lowe's only. The portal derives which retailers to offer from the stores that exist, so seeding Home Depot later is a seed change and not a code change.
 
-The service-area question remains open: the checklist in [11-deployment-and-environments](11-deployment-and-environments.md) and the dry-run checklist say **Upstate SC**, while the only staged list is **North Carolina**. The dev seed sidesteps it by placing the demo company in Charlotte NC so "nearest store" is meaningful against that list — a demo choice, not a resolution.
+The service area is **Upstate SC**, matching the checklist in [11-deployment-and-environments](11-deployment-and-environments.md) and the dry-run checklist. The North Carolina stores stay seeded and active. The dev seed's demo company is still in Charlotte NC — a demo choice only.
 

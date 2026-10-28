@@ -47,7 +47,7 @@ This list mixes immediate receiving prerequisites with later delivery systems. *
 | 13  | **Twilio account** + sender number            |       | A2P registration may take days — start early |
 | 14  | Vercel Cron schedule configured               |       | Notifications outbox + broadcast expiry      |
 | 15  | LLM provider API key                          |       | Deferred; deterministic Lowe's parser is the prototype path |
-| 16  | North Carolina Lowe's store list              |       | Pilot seed already exists; confirm stores relevant to the pilot site |
+| 16  | South Carolina Lowe's store list              | You   | Seed `0003_sc_stores.sql`; apply it to each environment through the SQL editor |
 
 Item 13 deserves emphasis: US A2P 10DLC registration is not instant. Starting it late blocks driver SMS, which blocks dispatch.
 

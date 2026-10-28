@@ -25,6 +25,8 @@ Both are answerable by the customer before they ever leave for the retailer's si
 3. **Store** — the nearest store to the site from the seeded `retailer_stores` list, which the customer can override. Seeding a store now also captures its **store-page URL** (verified once, at seed time) and the retailer's own label for it.
 4. **Instructions** — one screen per step: check your store, then build & share the cart, with a deep link to the store page and per-retailer copy for the button that sets it ("Set as My Store" / "Shop This Store").
 
+> **Changed 2026-10-28:** the two instruction screens became one finish step — copy the address, then open the store page — with a first-time tutorial over it: set your store, shop Pickup Today items, email us your cart (Lowe's has no "Share Cart" button; it's the ✉ / Share icon, which opens Email Cart). The decision itself — capture site, retailer and store first, deep-link to the store page — stands.
+
 The intent is matched to the order when the cart email arrives. **The order still originates only from an email** — an intent is a draft, not a new order source, so the email-intake decision is untouched.
 
 The dispatcher's store step becomes a **confirmation** of the customer's choice rather than an entry, and the order page's store step remains the second human check.

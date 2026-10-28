@@ -5,7 +5,13 @@
 ## How to submit a request
 
 1. **Recommended:** Sign in to the portal and start a request before building the cart. Choose your job site and preferred Lowe's store; the portal provides a unique `delivery+<token>@<receiving-domain>` address for this request.
-2. Build a cart on **Lowe's** for the selected store. Check availability, then use **Share Cart** to send it to the exact order-specific address the portal gave you. **Do not purchase or check out at Lowe's.** A shared cart is a request, not a reservation or an order.
+2. On the portal's last step, **copy the address**, then **open your store** on Lowe's. A short tutorial shows the steps the first time. On Lowe's:
+   - Tap **Set as My Store** on the store page. On a phone it is below the map and opening hours.
+   - Search with the **Pickup Today** filter. Items must be in stock at that store today.
+   - Open your cart, tap the **✉** envelope (**Share** on a computer), paste the order-specific address as the recipient in **Email Cart**, and send it.
+
+   **Do not purchase or check out at Lowe's.** A shared cart is a request, not a reservation or an order.
+
 3. **Fallback:** If you skip the portal, send the cart to `delivery@mg.getlockstep.io`. The dispatcher must confirm your company, job site, and store manually. Do not use an address the app says is not ready; the old Gmail inbox and previously seeded `things.dispatch+<company>` address are not the advertised pilot route.
 4. A dispatcher checks the items against the original Lowe's email and contacts you for missing on-site contact, materials estimate and delivery fee. **Lowe's share-cart email does not include prices, store or job-site information.**
 

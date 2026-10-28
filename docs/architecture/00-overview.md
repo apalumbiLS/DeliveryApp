@@ -64,7 +64,7 @@ These five findings were derived by inspecting the real Home Depot share-cart em
 | Customer UX     | Simplified portal: login, history, order detail/status, checkout                          |
 | Photo gates     | **Prompt but never block**; skip requires a reason                                        |
 | Parallel run    | **None.** No Slack, no Google Sheets. App is the sole system of record.                   |
-| Market          | North Carolina → Supabase `us-east-1`                                                     |
+| Market          | Upstate South Carolina → Supabase `us-east-1`                                             |
 | Docs            | Markdown + Mermaid, committed in-repo                                                     |
 
 Each decision has a corresponding ADR in [`docs/adr/`](../adr/README.md).
@@ -314,7 +314,7 @@ docs/
 
 ### Phase 1 — Foundation
 
-Next.js/Bun and Supabase schema are scaffolded; the pilot has North Carolina Lowe's store data. Your temporary Mailgun domain is verified for ownership but receiving MX and the Vercel callback still require an operator-run live test. Historical phase names below describe the broader roadmap, not the order in which to enable customer checkout.
+Next.js/Bun and Supabase schema are scaffolded; the pilot has South Carolina Lowe's store data (North Carolina is also seeded). Your temporary Mailgun domain is verified for ownership but receiving MX and the Vercel callback still require an operator-run live test. Historical phase names below describe the broader roadmap, not the order in which to enable customer checkout.
 
 ### Phase 2 — Email intake + parsing _(highest risk — deliberately early)_
 
