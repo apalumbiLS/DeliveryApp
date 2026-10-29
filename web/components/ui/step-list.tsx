@@ -7,8 +7,8 @@ const stepNumber = cva(
   {
     variants: {
       tone: {
-        default: "h-6 w-6 bg-accent text-[12px] text-accent-ink",
-        muted: "h-5 w-5 bg-sunken text-[11px] text-ink-muted",
+        default: "h-6 w-6 bg-accent text-[13.5px] text-accent-ink",
+        muted: "h-5 w-5 bg-hairline text-[12.5px] text-ink",
       },
     },
     defaultVariants: { tone: "default" },
@@ -18,8 +18,8 @@ const stepNumber = cva(
 const stepText = cva("leading-snug", {
   variants: {
     tone: {
-      default: "pt-0.5 text-[14px] text-ink",
-      muted: "pt-px text-[13px] text-ink-muted",
+      default: "pt-0.5 text-[16px] text-ink",
+      muted: "pt-px text-[15px] text-ink-muted",
     },
   },
   defaultVariants: { tone: "default" },

@@ -54,13 +54,13 @@ export default async function PortalOrdersPage() {
       />
 
       {error ? (
-        <p className="mt-5 rounded-field bg-danger-bg px-3 py-2 text-[12.5px] leading-relaxed text-danger-ink">
+        <p className="mt-5 rounded-field bg-danger-bg px-3 py-2 text-[14px] leading-relaxed text-danger-ink">
           Could not read orders: {error.message}
         </p>
       ) : orders.length === 0 ? (
         <Card className="mt-5 p-6">
-          <h2 className="text-[13px] font-medium text-ink">No orders yet</h2>
-          <p className="mt-1 text-[12.5px] leading-relaxed text-ink-muted">
+          <h2 className="text-[15px] font-medium text-ink">No orders yet</h2>
+          <p className="mt-1 text-[14px] leading-relaxed text-ink-muted">
             Send your first cart and it&apos;ll show up here.
           </p>
         </Card>
@@ -75,19 +75,19 @@ export default async function PortalOrdersPage() {
                 <StatusDot tone={orderStatusTone[order.status]} />
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-[13px] font-medium text-ink tabular-nums">
+                    <span className="text-[15px] font-medium text-ink tabular-nums">
                       {order.order_number}
                     </span>
                     <Badge tone={orderStatusTone[order.status]} bordered>
                       {portalStatusLabel(order.status)}
                     </Badge>
                   </div>
-                  <div className="mt-0.5 text-[12px] text-ink-faint">
+                  <div className="mt-0.5 text-[13.5px] text-ink-faint">
                     {retailerLabel(order.retailer)} ·{" "}
                     {shortDate.format(new Date(order.created_at))}
                   </div>
                 </div>
-                <span className="text-[13px] font-semibold text-ink tabular-nums">
+                <span className="text-[15px] font-semibold text-ink tabular-nums">
                   {order.total_cents > 0
                     ? money.format(order.total_cents / 100)
                     : "Not priced"}

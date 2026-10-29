@@ -6,6 +6,8 @@
  * them again — a server action can be invoked directly.
  */
 
+import { formatPhone } from "@/lib/phone";
+
 /** What an approval tells the form that sent it. `idle` is before any try. */
 export type ApproveResult = {
   outcome: "idle" | "approved" | "invalid" | "error";
@@ -45,6 +47,12 @@ export function parseApproval(
 
   return {
     ok: true,
-    value: { contactName, contactPhone, instructions: instructions || null },
+    value: {
+      contactName,
+      // Stored formatted, so the driver sees one style whether or not the
+      // form's on-blur formatting ran.
+      contactPhone: formatPhone(contactPhone),
+      instructions: instructions || null,
+    },
   };
 }

@@ -20,9 +20,9 @@ export const button = cva(
         ghost: "text-ink-muted hover:bg-sunken hover:text-ink",
       } satisfies Record<ButtonIntent, string>,
       size: {
-        sm: "rounded-control px-2.5 py-1.5 text-[11.5px]",
-        md: "rounded-control px-4 py-2.5 text-[13px]",
-        lg: "rounded-control px-5 py-3.5 text-[15px]",
+        sm: "rounded-control px-2.5 py-1.5 text-[13px]",
+        md: "rounded-control px-4 py-2.5 text-[15px]",
+        lg: "rounded-control px-5 py-3.5 text-[16px]",
       } satisfies Record<ButtonSize, string>,
     },
     defaultVariants: { intent: "primary", size: "sm" },

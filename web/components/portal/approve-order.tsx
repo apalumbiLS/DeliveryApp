@@ -10,6 +10,7 @@ import { PhoneIcon } from "@/components/ui/icons";
 import { Input, input } from "@/components/ui/input";
 import { StepList } from "@/components/ui/step-list";
 import { SUPPORT_PHONE } from "@/lib/brand";
+import { formatPhone } from "@/lib/phone";
 import type { ApproveResult } from "@/lib/portal/approval";
 
 const MESSAGES: Record<"invalid" | "error", string> = {
@@ -60,10 +61,10 @@ export function ApproveOrder({
     <Card className="px-4 py-4">
       <form onSubmit={onSubmit}>
         <input type="hidden" name="orderId" value={orderId} />
-        <h2 className="text-[10.5px] font-semibold tracking-widest text-ink-faint uppercase">
+        <h2 className="text-[12px] font-semibold tracking-widest text-ink-faint uppercase">
           Before you approve
         </h2>
-        <p className="mt-1.5 text-[12.5px] leading-relaxed text-ink-muted">
+        <p className="mt-1.5 text-[14px] leading-relaxed text-ink-muted">
           The driver sees the contact and instructions.
         </p>
 
@@ -86,10 +87,16 @@ export function ApproveOrder({
                 {...props}
                 name="contactPhone"
                 type="tel"
-                defaultValue={contactPhone}
+                defaultValue={formatPhone(contactPhone)}
                 required
                 maxLength={40}
                 autoComplete="tel"
+                // Formatted on leaving the field, not masked while typing.
+                onBlur={(event) => {
+                  event.currentTarget.value = formatPhone(
+                    event.currentTarget.value,
+                  );
+                }}
               />
             )}
           </Field>
@@ -112,7 +119,7 @@ export function ApproveOrder({
         </div>
 
         <div className="mt-4 border-t border-hairline-soft pt-3.5">
-          <h3 className="text-[10.5px] font-semibold tracking-widest text-ink-faint uppercase">
+          <h3 className="text-[12px] font-semibold tracking-widest text-ink-faint uppercase">
             After you approve
           </h3>
           <StepList
@@ -130,7 +137,7 @@ export function ApproveOrder({
         {message ? (
           <p
             role="alert"
-            className="mt-4 rounded-field bg-danger-bg px-3 py-2 text-[12.5px] leading-relaxed text-danger-ink"
+            className="mt-4 rounded-field bg-danger-bg px-3 py-2 text-[14px] leading-relaxed text-danger-ink"
           >
             {message}
           </p>
@@ -147,7 +154,7 @@ export function ApproveOrder({
 
         <a
           href={SUPPORT_PHONE.href}
-          className="mt-3 flex items-center justify-center gap-1.5 text-center text-[12.5px] font-medium text-accent hover:underline"
+          className="mt-1 flex items-center justify-center gap-1.5 py-3 text-center text-[14px] font-medium text-accent hover:underline"
         >
           <PhoneIcon className="h-3.5 w-3.5 shrink-0" />
           Wrong item, store or address? Call {SUPPORT_PHONE.display}

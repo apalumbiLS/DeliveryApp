@@ -65,9 +65,9 @@ function SelectCard({
       </span>
       {leading}
       <span className="min-w-0">
-        <span className="block text-[13px] font-medium text-ink">{title}</span>
+        <span className="block text-[15px] font-medium text-ink">{title}</span>
         {subtitle ? (
-          <span className="mt-0.5 block text-[11.5px] text-ink-faint">
+          <span className="mt-0.5 block text-[13px] text-ink-faint">
             {subtitle}
           </span>
         ) : null}
@@ -78,7 +78,7 @@ function SelectCard({
 
 function RetailerMark({ label }: { label: string }) {
   return (
-    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-control bg-sunken text-[12px] font-semibold text-ink-muted">
+    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-control bg-sunken text-[13.5px] font-semibold text-ink-muted">
       {label.slice(0, 1)}
     </span>
   );
@@ -93,11 +93,11 @@ function StepHeading({
 }) {
   return (
     <>
-      <h2 className="text-[19px] leading-snug font-semibold tracking-tight text-ink">
+      <h2 className="text-[21px] leading-snug font-semibold tracking-tight text-ink">
         {title}
       </h2>
       {children ? (
-        <p className="mt-2 text-[12.5px] leading-relaxed text-ink-muted">
+        <p className="mt-2 text-[14px] leading-relaxed text-ink-muted">
           {children}
         </p>
       ) : null}
@@ -152,7 +152,7 @@ export function SiteStep({
           <button
             type="button"
             onClick={() => setShowAll(true)}
-            className="w-full py-1.5 text-[12.5px] font-medium text-accent transition-colors hover:text-accent-hover"
+            className="w-full py-3 text-[14px] font-medium text-accent transition-colors hover:text-accent-hover"
           >
             Show all {sites.length} sites
           </button>
@@ -365,10 +365,10 @@ export function StoreStep({
       </StepHeading>
 
       <Card className="mt-4 px-4 py-4">
-        <div className="text-[15px] font-semibold tracking-tight text-ink">
+        <div className="text-[16px] font-semibold tracking-tight text-ink">
           {selected.name}
         </div>
-        <div className="mt-1 text-[12px] text-ink-muted">
+        <div className="mt-1 text-[13.5px] text-ink-muted">
           {selectedMiles !== null
             ? `${formatDistance(selectedMiles)} from ${siteLabel} · `
             : ""}
@@ -379,7 +379,7 @@ export function StoreStep({
       <button
         type="button"
         onClick={() => setPicking((open) => !open)}
-        className="mt-2.5 cursor-pointer text-[12.5px] font-medium text-accent transition-colors hover:text-accent-hover"
+        className="mt-2.5 cursor-pointer text-[14px] font-medium text-accent transition-colors hover:text-accent-hover"
       >
         {picking ? "Hide other stores" : "Choose another store"}
       </button>
@@ -390,12 +390,12 @@ export function StoreStep({
             type="search"
             value={filter}
             onChange={(event) => setFilter(event.target.value)}
-            placeholder="Search by ZIP, city, or store name"
-            aria-label="Search stores"
+            placeholder="Filter by ZIP, city, or store name"
+            aria-label="Filter stores"
           />
 
           {visible.length === 0 ? (
-            <p className="px-1 py-1 text-[11.5px] leading-relaxed text-ink-faint">
+            <p className="px-1 py-1 text-[13px] leading-relaxed text-ink-faint">
               No stores match “{filter.trim()}”. Get in touch and we&apos;ll add
               it.
             </p>
@@ -417,7 +417,7 @@ export function StoreStep({
           )}
 
           {visible.length > 0 ? (
-            <p className="px-1 text-[11.5px] leading-relaxed text-ink-faint">
+            <p className="px-1 text-[13px] leading-relaxed text-ink-faint">
               Not seeing your store? Get in touch and we&apos;ll add it.
             </p>
           ) : null}
@@ -507,10 +507,10 @@ export function FinishStep({
 
       {alias ? (
         <div className="mt-5">
-          <p className="text-[12.5px] text-ink-muted">
+          <p className="text-[14px] text-ink-muted">
             You&apos;ll paste this as the recipient
           </p>
-          <p className="mt-2 rounded-field border border-hairline bg-card px-3 py-2.5 font-mono text-[13px] break-all text-ink select-all">
+          <p className="mt-2 rounded-field border border-hairline bg-card px-3 py-2.5 font-mono text-[15px] break-all text-ink select-all">
             {alias}
           </p>
 
@@ -556,13 +556,13 @@ export function FinishStep({
           </div>
 
           {copyState === "failed" ? (
-            <p className="mt-2 text-[12.5px] text-warning-ink">
+            <p className="mt-2 text-[14px] text-warning-ink">
               Couldn&apos;t copy. Copy the address by hand.
             </p>
           ) : null}
         </div>
       ) : (
-        <p className="mt-5 rounded-field bg-warning-bg px-3 py-2 text-[12.5px] leading-relaxed text-warning-ink">
+        <p className="mt-5 rounded-field bg-warning-bg px-3 py-2 text-[14px] leading-relaxed text-warning-ink">
           We don&apos;t have an order address set up yet. Get in touch and
           we&apos;ll sort it out before you build your cart.
         </p>
@@ -574,7 +574,7 @@ export function FinishStep({
         <button
           type="button"
           onClick={() => setTutorialOpen(true)}
-          className="flex items-center gap-1.5 text-[12px] text-ink-faint transition-colors hover:text-ink-muted"
+          className="-my-3 flex items-center gap-1.5 py-3 text-[13.5px] text-ink-faint transition-colors hover:text-ink-muted"
         >
           <CirclePlay className="h-3.5 w-3.5" aria-hidden />
           How it works

@@ -86,8 +86,8 @@ export function LowesPickupTodayShot() {
       aria-label="Lowe's search results, with the Pickup Today filter"
       className="w-full max-w-sm overflow-hidden rounded-field border border-hairline bg-card px-4 pt-3.5 pb-4"
     >
-      <div className="text-[17px] font-semibold text-ink">paint brush</div>
-      <div className="mt-0.5 text-[12px] text-ink-muted">1280 results</div>
+      <div className="text-[18px] font-semibold text-ink">paint brush</div>
+      <div className="mt-0.5 text-[13.5px] text-ink-muted">1280 results</div>
       <div className="mt-3.5 flex gap-2.5 pt-1 pl-1">
         <LowesChip>
           <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />

@@ -29,7 +29,7 @@ export function PortalNav() {
             href={link.href}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "relative rounded-control px-2.5 py-1.5 text-[12.5px] font-medium transition-colors",
+              "relative flex min-h-11 items-center rounded-control px-3 text-[14px] font-medium transition-colors",
               active
                 ? "bg-accent-soft text-accent-soft-ink"
                 : "text-ink-muted hover:bg-sunken hover:text-ink",
@@ -57,7 +57,7 @@ function PendingHint() {
     <span
       aria-hidden
       className={cn(
-        "absolute inset-x-2.5 -bottom-0.5 h-0.5 rounded-full bg-accent opacity-0 transition-opacity duration-150 motion-reduce:transition-none",
+        "absolute inset-x-3 -bottom-0.5 h-0.5 rounded-full bg-accent opacity-0 transition-opacity duration-150 motion-reduce:transition-none",
         pending && "animate-pulse opacity-100 motion-reduce:animate-none",
       )}
     />

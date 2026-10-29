@@ -26,6 +26,7 @@ import {
   portalStatusLabel,
   type CustomerOrder,
 } from "@/lib/portal/order";
+import { formatPhone } from "@/lib/phone";
 import { createClient } from "@/lib/supabase/server";
 import { orderStatusTone } from "@/lib/tokens";
 
@@ -51,7 +52,7 @@ function SectionCard({
 }) {
   return (
     <Card className="px-4 py-3.5">
-      <h2 className="text-[10.5px] font-semibold tracking-widest text-ink-faint uppercase">
+      <h2 className="text-[12px] font-semibold tracking-widest text-ink-faint uppercase">
         {title}
       </h2>
       <div className="mt-2">{children}</div>
@@ -69,7 +70,7 @@ function ItemsCard({ order }: { order: CustomerOrder }) {
             className="flex items-start justify-between gap-3 py-2.5"
           >
             <div className="min-w-0">
-              <div className="text-[13px] leading-snug font-medium text-ink">
+              <div className="text-[15px] leading-snug font-medium text-ink">
                 {item.productUrl ? (
                   <a
                     href={item.productUrl}
@@ -83,13 +84,13 @@ function ItemsCard({ order }: { order: CustomerOrder }) {
                   item.description
                 )}
               </div>
-              <div className="mt-0.5 text-[11.5px] text-ink-faint">
+              <div className="mt-0.5 text-[13px] text-ink-faint">
                 {item.storeSku ? `Item #${item.storeSku}` : null}
                 {item.storeSku && item.modelNumber ? " · " : null}
                 {item.modelNumber ? `Model #${item.modelNumber}` : null}
               </div>
             </div>
-            <span className="shrink-0 text-[13px] font-semibold text-ink tabular-nums">
+            <span className="shrink-0 text-[15px] font-semibold text-ink tabular-nums">
               {item.quantity}×
             </span>
           </li>
@@ -119,22 +120,22 @@ function PlacesCards({
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       <SectionCard title="Pick up at">
-        <div className="text-[13px] font-medium text-ink">
+        <div className="text-[15px] font-medium text-ink">
           {order.retailerLabel}
           {order.store ? ` · ${order.store.name}` : null}
         </div>
         {order.store?.city ? (
-          <div className="mt-0.5 text-[12px] text-ink-muted">
+          <div className="mt-0.5 text-[13.5px] text-ink-muted">
             {[order.store.city, order.store.state].filter(Boolean).join(", ")}
           </div>
         ) : null}
       </SectionCard>
 
       <SectionCard title="Deliver to">
-        <div className="text-[13px] font-medium text-ink">
+        <div className="text-[15px] font-medium text-ink">
           {order.siteLabel ?? "Job site"}
         </div>
-        <div className="mt-0.5 text-[12px] leading-relaxed text-ink-muted">
+        <div className="mt-0.5 text-[13.5px] leading-relaxed text-ink-muted">
           {street || town ? (
             <>
               {street ? <div>{street}</div> : null}
@@ -145,15 +146,18 @@ function PlacesCards({
           )}
         </div>
         {!approving && (delivery.contactName || delivery.contactPhone) ? (
-          <div className="mt-2 text-[12px] text-ink-muted">
+          <div className="mt-2 text-[13.5px] text-ink-muted">
             <span className="text-ink-faint">On-site contact</span>{" "}
-            {[delivery.contactName, delivery.contactPhone]
+            {[
+              delivery.contactName,
+              delivery.contactPhone ? formatPhone(delivery.contactPhone) : null,
+            ]
               .filter(Boolean)
               .join(" · ")}
           </div>
         ) : null}
         {!approving && delivery.instructions ? (
-          <p className="mt-2 border-t border-hairline-soft pt-2 text-[12px] leading-relaxed text-ink-muted">
+          <p className="mt-2 border-t border-hairline-soft pt-2 text-[13.5px] leading-relaxed text-ink-muted">
             {delivery.instructions}
           </p>
         ) : null}
@@ -172,11 +176,11 @@ function PriceRow({
   cents: number;
 }) {
   return (
-    <div className="flex items-baseline justify-between gap-3 py-1 text-[12.5px]">
+    <div className="flex items-baseline justify-between gap-3 py-1 text-[14px]">
       <span className="text-ink-muted">
         {label}
         {hint ? (
-          <span className="ml-1.5 text-[11px] text-ink-faint">{hint}</span>
+          <span className="ml-1.5 text-[12.5px] text-ink-faint">{hint}</span>
         ) : null}
       </span>
       <span className="text-ink tabular-nums">{money.format(cents / 100)}</span>
@@ -205,20 +209,20 @@ function PriceCard({ order }: { order: CustomerOrder }) {
             <PriceRow label="Tax" cents={price.taxCents} />
           ) : null}
           <div className="mt-1.5 flex items-baseline justify-between gap-3 border-t border-hairline-soft pt-2.5">
-            <span className="text-[13px] font-semibold text-ink">
+            <span className="text-[15px] font-semibold text-ink">
               Estimated total
             </span>
-            <span className="text-[15px] font-semibold text-ink tabular-nums">
+            <span className="text-[16px] font-semibold text-ink tabular-nums">
               {money.format(price.totalCents / 100)}
             </span>
           </div>
-          <p className="mt-2 text-[11.5px] leading-relaxed text-ink-faint">
+          <p className="mt-2 text-[13px] leading-relaxed text-ink-faint">
             This is an estimate. The final total uses the {order.retailerLabel}{" "}
             receipt.
           </p>
         </>
       ) : (
-        <p className="text-[12.5px] text-ink-muted">Not priced yet.</p>
+        <p className="text-[14px] text-ink-muted">Not priced yet.</p>
       )}
     </SectionCard>
   );
@@ -241,7 +245,7 @@ export default async function PortalOrderPage(
     <div>
       <Link
         href="/portal/orders"
-        className="text-[12px] font-medium text-ink-muted transition-colors hover:text-ink"
+        className="text-[13.5px] font-medium text-ink-muted transition-colors hover:text-ink"
       >
         ← Orders
       </Link>
@@ -259,7 +263,7 @@ export default async function PortalOrderPage(
 
       <div className="mt-5 space-y-3">
         {order.customerConfirmedAt ? (
-          <div className="flex items-center gap-2 rounded-card bg-success-bg px-4 py-3 text-[12.5px] font-medium text-success-ink">
+          <div className="flex items-center gap-2 rounded-card bg-success-bg px-4 py-3 text-[14px] font-medium text-success-ink">
             <CheckIcon className="h-4 w-4 shrink-0" />
             <span>
               You approved this order on{" "}

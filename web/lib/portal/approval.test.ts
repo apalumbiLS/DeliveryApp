@@ -39,6 +39,13 @@ describe("parseApproval", () => {
     expect(result.ok && result.value.instructions).toBe("Gate code 4412");
   });
 
+  test("formats the phone number", () => {
+    const result = parseApproval(
+      form({ contactName: "Dave", contactPhone: "864.555.0147" }),
+    );
+    expect(result.ok && result.value.contactPhone).toBe("(864) 555-0147");
+  });
+
   test("refuses a missing name or a phone without enough digits", () => {
     expect(
       parseApproval(form({ contactName: "", contactPhone: "864-555-0147" })),

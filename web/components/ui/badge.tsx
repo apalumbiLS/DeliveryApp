@@ -20,8 +20,8 @@ export const badge = cva(
         accent: "bg-accent-soft text-accent-soft-ink",
       } satisfies Record<BadgeTone, string>,
       size: {
-        sm: "px-2 py-0.5 text-[11px]",
-        md: "px-2.5 py-1 text-[12px]",
+        sm: "px-2 py-0.5 text-[12.5px]",
+        md: "px-2.5 py-1 text-[13.5px]",
       } satisfies Record<BadgeSize, string>,
       bordered: {
         true: "inset-ring-1 inset-ring-current/20",

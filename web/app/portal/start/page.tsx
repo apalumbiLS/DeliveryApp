@@ -43,10 +43,10 @@ export default async function PortalStartPage() {
   if (!isInboundAddressReady()) {
     return (
       <Card className="p-6">
-        <h1 className="text-[15px] font-semibold text-ink">
+        <h1 className="text-[16px] font-semibold text-ink">
           Cart email intake is not ready yet
         </h1>
-        <p className="mt-1 text-[12.5px] leading-relaxed text-ink-muted">
+        <p className="mt-1 text-[14px] leading-relaxed text-ink-muted">
           Ask the dispatcher to confirm that cart receiving is ready before
           sharing. The old Gmail address does not reach this app.
         </p>
@@ -143,10 +143,10 @@ export default async function PortalStartPage() {
   if (sitesResult.error || storesResult.error) {
     return (
       <Card className="p-6">
-        <h1 className="text-[15px] font-semibold text-ink">
+        <h1 className="text-[16px] font-semibold text-ink">
           Could not load the order flow
         </h1>
-        <p className="mt-1 text-[12.5px] leading-relaxed text-ink-muted">
+        <p className="mt-1 text-[14px] leading-relaxed text-ink-muted">
           {sitesResult.error?.message ?? storesResult.error?.message}
         </p>
       </Card>
@@ -158,10 +158,10 @@ export default async function PortalStartPage() {
   if (stores.length === 0) {
     return (
       <Card className="p-6">
-        <h1 className="text-[15px] font-semibold text-ink">
+        <h1 className="text-[16px] font-semibold text-ink">
           No stores are set up yet
         </h1>
-        <p className="mt-1 text-[12.5px] leading-relaxed text-ink-muted">
+        <p className="mt-1 text-[14px] leading-relaxed text-ink-muted">
           We&apos;re still adding the stores we buy from. Get in touch and
           we&apos;ll get you started.
         </p>

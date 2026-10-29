@@ -1,5 +1,11 @@
 "use client";
 
+import {
+  AnimatePresence,
+  MotionConfig,
+  motion,
+  type Variants,
+} from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -26,6 +32,31 @@ import {
 
 const STEP_COUNT = 4;
 
+type Direction = "forward" | "back";
+
+// The old step slides out the way the flow is moving and the new one follows
+// it in from the other side. The shift stays inside the page gutter, so it
+// never adds a horizontal scrollbar.
+const STEP_SHIFT = 12;
+const EASE_OUT = [0.22, 1, 0.36, 1] as const;
+
+const stepVariants: Variants = {
+  enter: (direction: Direction) => ({
+    opacity: 0,
+    x: direction === "forward" ? STEP_SHIFT : -STEP_SHIFT,
+  }),
+  center: {
+    opacity: 1,
+    x: 0,
+    transition: { duration: 0.24, ease: EASE_OUT },
+  },
+  exit: (direction: Direction) => ({
+    opacity: 0,
+    x: direction === "forward" ? -STEP_SHIFT : STEP_SHIFT,
+    transition: { duration: 0.14, ease: "easeIn" },
+  }),
+};
+
 export function StartOrderFlow({
   sites,
   stores,
@@ -37,6 +68,8 @@ export function StartOrderFlow({
   const defaultSite = sites[0] ?? null;
 
   const [step, setStep] = useState(0);
+  // Which way the last move went, so the new step slides in from that side.
+  const [direction, setDirection] = useState<Direction>("forward");
   const [siteMode, setSiteMode] = useState<"saved" | "new">("saved");
   const [savedSiteId, setSavedSiteId] = useState<string | null>(
     defaultSite?.id ?? null,
@@ -52,10 +85,6 @@ export function StartOrderFlow({
     zip: string;
     point: { lat: number; lng: number } | null;
   } | null>(null);
-
-  useEffect(() => {
-    window.scrollTo({ top: 0 });
-  }, [step]);
 
   // The footer only pins when content runs beneath it; the sentinel sits at its
   // natural position, so while that is below the viewport the footer is stuck
@@ -175,6 +204,11 @@ export function StartOrderFlow({
     true,
   ][step];
 
+  function goTo(target: number) {
+    setDirection(target < step ? "back" : "forward");
+    setStep(target);
+  }
+
   function clearIntent() {
     setIntentId(null);
     setIntentAddress(null);
@@ -184,7 +218,7 @@ export function StartOrderFlow({
     setError(null);
 
     if (intentId && intentAddress) {
-      setStep(3);
+      goTo(3);
       return;
     }
 
@@ -222,7 +256,7 @@ export function StartOrderFlow({
 
     setIntentId(result.intentId);
     setIntentAddress(result.orderAddress);
-    setStep(3);
+    goTo(3);
   }
 
   function next() {
@@ -233,31 +267,31 @@ export function StartOrderFlow({
       return;
     }
     setError(null);
-    setStep((current) => Math.min(STEP_COUNT - 1, current + 1));
+    goTo(Math.min(STEP_COUNT - 1, step + 1));
   }
 
   return (
-    <div>
+    <div className="flex flex-1 flex-col">
       <div className="flex items-center justify-between gap-3">
         {step > 0 ? (
           <button
             type="button"
             onClick={() => {
               setError(null);
-              setStep((current) => Math.max(0, current - 1));
+              goTo(Math.max(0, step - 1));
             }}
-            className="flex cursor-pointer items-center gap-1 text-[12px] font-medium text-ink-muted transition-colors hover:text-ink"
+            className="-my-3 flex cursor-pointer items-center gap-1 py-3 text-[13.5px] font-medium text-ink-muted transition-colors hover:text-ink"
           >
             <Chevron className="h-3.5 w-3.5 rotate-180" />
             Back
           </button>
         ) : (
-          <span className="text-[12px] font-medium text-ink-muted">
+          <span className="text-[13.5px] font-medium text-ink-muted">
             Start an order
           </span>
         )}
 
-        <span className="text-[10.5px] font-semibold tracking-[0.14em] text-ink-faint uppercase">
+        <span className="text-[12px] font-semibold tracking-[0.14em] text-ink-faint uppercase">
           Step {step + 1} of {STEP_COUNT}
         </span>
       </div>
@@ -267,91 +301,117 @@ export function StartOrderFlow({
           <span
             key={index}
             className={cn(
-              "h-1 flex-1 rounded-full",
+              "h-1 flex-1 rounded-full transition-colors duration-300 motion-reduce:transition-none",
               index <= step ? "bg-accent" : "bg-sunken",
             )}
           />
         ))}
       </div>
 
-      <section className="mt-6">
-        {step === 0 ? (
-          <SiteStep
-            sites={sites}
-            mode={siteMode}
-            savedSiteId={savedSiteId}
-            address={address}
-            onSelectSaved={(id) => {
-              clearIntent();
-              setSiteMode("saved");
-              setSavedSiteId(id);
-            }}
-            onSelectNew={() => {
-              clearIntent();
-              setSiteMode("new");
-            }}
-            onAddressChange={(patch) => {
-              clearIntent();
-              setAddress((current) => ({ ...current, ...patch }));
-            }}
-          />
-        ) : null}
+      {/*
+       * One step at a time: the next mounts once the last has slid out, and
+       * the page returns to the top in between so it never jumps mid-slide.
+       * Reduced motion drops the slide and keeps the fade.
+       */}
+      <MotionConfig reducedMotion="user">
+        <AnimatePresence
+          mode="wait"
+          initial={false}
+          custom={direction}
+          onExitComplete={() => window.scrollTo({ top: 0 })}
+        >
+          <motion.section
+            key={step}
+            custom={direction}
+            variants={stepVariants}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            className="mt-6"
+          >
+            {step === 0 ? (
+              <SiteStep
+                sites={sites}
+                mode={siteMode}
+                savedSiteId={savedSiteId}
+                address={address}
+                onSelectSaved={(id) => {
+                  clearIntent();
+                  setSiteMode("saved");
+                  setSavedSiteId(id);
+                }}
+                onSelectNew={() => {
+                  clearIntent();
+                  setSiteMode("new");
+                }}
+                onAddressChange={(patch) => {
+                  clearIntent();
+                  setAddress((current) => ({ ...current, ...patch }));
+                }}
+              />
+            ) : null}
 
-        {step === 1 ? (
-          <RetailerStep
-            retailers={availableRetailers}
-            unavailable={unavailableRetailers}
-            value={activeRetailerId}
-            onChange={(id) => {
-              clearIntent();
-              setRetailerId(id);
-              setStoreId(null);
-            }}
-          />
-        ) : null}
+            {step === 1 ? (
+              <RetailerStep
+                retailers={availableRetailers}
+                unavailable={unavailableRetailers}
+                value={activeRetailerId}
+                onChange={(id) => {
+                  clearIntent();
+                  setRetailerId(id);
+                  setStoreId(null);
+                }}
+              />
+            ) : null}
 
-        {step === 2 ? (
-          <StoreStep
-            ranked={ranked}
-            value={activeStoreId}
-            siteLabel={siteLabel}
-            hasCoordinates={sitePoint !== null}
-            onChange={(id) => {
-              clearIntent();
-              setStoreId(id);
-            }}
-          />
-        ) : null}
+            {step === 2 ? (
+              <StoreStep
+                ranked={ranked}
+                value={activeStoreId}
+                siteLabel={siteLabel}
+                hasCoordinates={sitePoint !== null}
+                onChange={(id) => {
+                  clearIntent();
+                  setStoreId(id);
+                }}
+              />
+            ) : null}
 
-        {step === 3 && activeRetailerId && activeEntry ? (
-          <FinishStep
-            retailerId={activeRetailerId}
-            store={activeEntry}
-            alias={intentId ? intentAddress : null}
-          />
-        ) : null}
-      </section>
+            {step === 3 && activeRetailerId && activeEntry ? (
+              <FinishStep
+                retailerId={activeRetailerId}
+                store={activeEntry}
+                alias={intentId ? intentAddress : null}
+              />
+            ) : null}
+          </motion.section>
+        </AnimatePresence>
+      </MotionConfig>
 
       {error ? (
         <p
           role="alert"
-          className="mt-5 rounded-field bg-danger-bg px-3 py-2 text-[12.5px] leading-relaxed text-danger-ink"
+          className="mt-5 rounded-field bg-danger-bg px-3 py-2 text-[14px] leading-relaxed text-danger-ink"
         >
           {error}
         </p>
       ) : null}
 
       {/*
-       * Sticky, not fixed: it only pins when a step outgrows the screen (the new
-       * address form on a phone), and never floats over a short step. The
-       * negative margin carries the background across the page gutter so
-       * scrolled content doesn't show beside it. The last step has no footer:
+       * Always at the bottom of the screen: the flow fills the page and the
+       * spacer pushes the footer down on a short step, and sticky pins it when a
+       * step outgrows the screen (the new address form on a phone). The negative
+       * margins carry it across the page gutter and over the page's bottom
+       * padding, so it sits flush in both cases. The last step has no footer:
        * its actions are in its checklist.
        */}
       {step < STEP_COUNT - 1 ? (
+        <div aria-hidden className="min-h-8 flex-1" />
+      ) : null}
+      {step < STEP_COUNT - 1 ? (
         <div
           className={cn(
-            "sticky bottom-0 -mx-5 mt-8 flex flex-col gap-2 border-t border-hairline-soft bg-card-muted px-5 pt-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] transition-shadow",
+            "sticky bottom-0 -mx-5 -mb-6 flex flex-col gap-2 border-t border-hairline-soft bg-card-muted px-5 pt-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] transition-shadow",
             footerStuck && "shadow-footer",
           )}
         >
@@ -364,7 +424,7 @@ export function StartOrderFlow({
             {saving ? "Saving…" : "Continue"}
           </button>
 
-          <p className="text-center text-[11.5px] leading-relaxed text-ink-faint">
+          <p className="text-center text-[13px] leading-relaxed text-ink-faint">
             Nothing is ordered until you approve the price.
           </p>
         </div>

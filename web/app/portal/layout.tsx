@@ -32,10 +32,10 @@ export default async function PortalLayout({
     return (
       <main className="flex min-h-full flex-1 items-center justify-center bg-card-muted px-5 py-10">
         <Card className="w-full max-w-sm p-6">
-          <h1 className="text-[17px] font-semibold tracking-tight text-ink">
+          <h1 className="text-[18px] font-semibold tracking-tight text-ink">
             Portal unavailable
           </h1>
-          <p className="mt-2 text-[12.5px] leading-relaxed text-ink-muted">
+          <p className="mt-2 text-[14px] leading-relaxed text-ink-muted">
             Supabase is not configured. Copy <code>web/.env.example</code> to{" "}
             <code>web/.env.local</code> and set{" "}
             <code>NEXT_PUBLIC_SUPABASE_URL</code> and{" "}

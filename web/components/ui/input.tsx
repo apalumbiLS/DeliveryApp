@@ -4,7 +4,7 @@ import type { ComponentProps } from "react";
 import { cn } from "@/lib/utils";
 
 export const input = cva(
-  "w-full rounded-field border bg-card px-3 py-2.5 text-[13px] text-ink transition-colors outline-none placeholder:text-ink-faint disabled:cursor-not-allowed disabled:opacity-60",
+  "w-full rounded-field border bg-card px-3 py-2.5 text-[15px] text-ink transition-colors outline-none pointer-coarse:text-base placeholder:text-ink-faint disabled:cursor-not-allowed disabled:opacity-60",
   {
     variants: {
       invalid: {

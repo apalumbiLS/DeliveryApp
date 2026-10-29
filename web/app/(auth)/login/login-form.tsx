@@ -47,7 +47,7 @@ export function LoginForm({ next }: { next?: string }) {
       {state?.error ? (
         <p
           role="alert"
-          className="rounded-field bg-danger-bg px-3 py-2 text-[12.5px] leading-relaxed text-danger-ink"
+          className="rounded-field bg-danger-bg px-3 py-2 text-[14px] leading-relaxed text-danger-ink"
         >
           {state.error}
         </p>

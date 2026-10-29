@@ -15,11 +15,11 @@ export const metadata: Metadata = {
 export default function RequestAccessPage() {
   return (
     <Card className="p-6">
-      <h1 className="text-[17px] font-semibold tracking-tight text-ink">
+      <h1 className="text-[18px] font-semibold tracking-tight text-ink">
         Request access
       </h1>
 
-      <div className="mt-2 space-y-2 text-[12.5px] leading-relaxed text-ink-muted">
+      <div className="mt-2 space-y-2 text-[14px] leading-relaxed text-ink-muted">
         <p>
           Portal accounts are set up by our dispatch team — there&apos;s no
           self-signup. Every account belongs to a company, and the company is
@@ -37,7 +37,7 @@ export default function RequestAccessPage() {
 
       <Link
         href="/login"
-        className="mt-5 inline-block text-[12.5px] font-medium text-accent transition-colors hover:text-accent-hover"
+        className="mt-5 inline-block text-[14px] font-medium text-accent transition-colors hover:text-accent-hover"
       >
         ← Back to sign in
       </Link>

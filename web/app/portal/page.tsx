@@ -49,13 +49,13 @@ export default async function PortalHomePage() {
               Start an order
               <Chevron className="h-4.5 w-4.5" />
             </Link>
-            <p className="mt-5 text-[10.5px] font-semibold tracking-widest text-ink-faint uppercase">
+            <p className="mt-5 text-[12px] font-semibold tracking-widest text-ink-faint uppercase">
               How it works
             </p>
             <StepList steps={STEPS} tone="muted" className="mt-2.5" />
           </>
         ) : (
-          <p className="text-[12.5px] leading-relaxed text-warning-ink">
+          <p className="text-[14px] leading-relaxed text-warning-ink">
             Cart intake is not ready. Contact the dispatcher before sharing. The
             old Gmail address does not reach this app.
           </p>
@@ -68,7 +68,7 @@ export default async function PortalHomePage() {
           className="flex items-center gap-3 rounded-card border border-hairline bg-accent-soft px-4 py-3.5 transition-colors hover:bg-accent-soft/70"
         >
           <StatusDot tone="warning" />
-          <span className="flex-1 text-[13px] font-medium text-accent-soft-ink">
+          <span className="flex-1 text-[15px] font-medium text-accent-soft-ink">
             Order {awaiting.order_number} is ready to approve
           </span>
           <Chevron className="h-4 w-4 text-accent-soft-ink/70" />

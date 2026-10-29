@@ -23,26 +23,26 @@ export function AppShell({
       <header className="border-b border-hairline bg-card">
         <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 px-5 py-3.5">
           <div className="flex min-w-0 items-center gap-2.5">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-control bg-accent text-[12px] font-semibold text-accent-ink">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-control bg-accent text-[13.5px] font-semibold text-accent-ink">
               <TruckIcon className="h-4.5 w-4.5" />
             </div>
             <div className="min-w-0">
-              <div className="truncate text-[13px] font-semibold text-ink">
+              <div className="truncate text-[15px] font-semibold text-ink">
                 {title}
               </div>
-              <div className="truncate text-[11px] text-ink-faint">
+              <div className="truncate text-[12.5px] text-ink-faint">
                 {subtitle}
               </div>
             </div>
           </div>
 
-          <SignOutButton />
+          <SignOutButton size="md" />
         </div>
 
         {nav}
       </header>
 
-      <main className="mx-auto w-full max-w-3xl flex-1 px-5 py-6">
+      <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-5 py-6">
         {children}
       </main>
     </div>

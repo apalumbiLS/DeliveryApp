@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 export function Table({ className, ...props }: ComponentProps<"table">) {
   return (
     <table
-      className={cn("w-full border-collapse text-left text-[13px]", className)}
+      className={cn("w-full border-collapse text-left text-[15px]", className)}
       {...props}
     />
   );
@@ -40,7 +40,7 @@ export function Th({ className, ...props }: ComponentProps<"th">) {
   return (
     <th
       className={cn(
-        "px-4 py-2.5 text-[11px] font-medium tracking-[0.08em] text-ink-faint uppercase",
+        "px-4 py-2.5 text-[12.5px] font-medium tracking-[0.08em] text-ink-faint uppercase",
         className,
       )}
       {...props}

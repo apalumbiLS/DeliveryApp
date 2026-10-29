@@ -41,7 +41,7 @@ export default function LandingPage() {
           <Chevron className="h-4.5 w-4.5" />
         </Link>
 
-        <p className="mt-4 text-center text-[11.5px] leading-relaxed text-ink-faint">
+        <p className="mt-4 text-center text-[13px] leading-relaxed text-ink-faint">
           No account yet?{" "}
           <Link
             href="/request-access"

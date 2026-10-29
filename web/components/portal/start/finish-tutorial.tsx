@@ -93,21 +93,21 @@ function beat(seconds: number) {
 const SIZES = {
   list: {
     row: "gap-3.5",
-    badge: "h-8 w-8 text-[14px]",
+    badge: "h-8 w-8 text-[16px]",
     check: "h-4 w-4",
-    title: "text-[17px] font-medium text-ink",
+    title: "text-[18px] font-medium text-ink",
   },
   stage: {
     row: "gap-3.5",
-    badge: "h-10 w-10 text-[17px]",
+    badge: "h-10 w-10 text-[18px]",
     check: "h-5 w-5",
     title: "text-[22px] leading-tight font-semibold tracking-tight text-ink",
   },
   stack: {
     row: "gap-2.5",
-    badge: "h-5 w-5 text-[10.5px]",
+    badge: "h-5 w-5 text-[12px]",
     check: "h-3 w-3",
-    title: "text-[13px] text-ink-muted",
+    title: "text-[15px] text-ink-muted",
   },
 };
 
@@ -304,10 +304,10 @@ export function FinishTutorial({
             )}
             style={lowes ? beat(EMAIL_CHECKOUT_AT) : undefined}
           >
-            <p className="text-[15px] font-semibold text-ink">
+            <p className="text-[16px] font-semibold text-ink">
               Don&apos;t check out
             </p>
-            <p className="text-[14px] text-ink-muted">We buy it for you.</p>
+            <p className="text-[16px] text-ink-muted">We buy it for you.</p>
             {lowes ? (
               <div className="mt-4 px-3 pt-3">
                 <LowesCheckoutShot />
@@ -379,7 +379,7 @@ export function FinishTutorial({
           type="button"
           onClick={onClose}
           aria-label="Close"
-          className="rounded-full p-1 text-ink-faint transition-colors hover:bg-sunken hover:text-ink"
+          className="-m-2 rounded-full p-3 text-ink-faint transition-colors hover:bg-sunken hover:text-ink"
         >
           <X className="h-5 w-5" />
         </button>
@@ -411,7 +411,7 @@ export function FinishTutorial({
                     <h2 className="text-[24px] leading-tight font-semibold tracking-tight text-ink">
                       Here&apos;s what&apos;s next
                     </h2>
-                    <p className="mt-1.5 text-[15px] leading-snug text-ink-muted">
+                    <p className="mt-1.5 text-[16px] leading-snug text-ink-muted">
                       You&apos;ll build your cart on {retailer.label}. Three
                       quick things:
                     </p>
@@ -484,7 +484,7 @@ export function FinishTutorial({
                     }}
                     exit={{ opacity: 0, transition: { duration: 0.15 } }}
                   >
-                    <div className="mt-4 text-[15px] leading-snug text-ink-muted">
+                    <div className="mt-4 text-[16px] leading-snug text-ink-muted">
                       {items[staged].caption}
                     </div>
                     <div className="mt-5">{items[staged].visual(paused)}</div>
@@ -503,10 +503,10 @@ export function FinishTutorial({
                       aria-hidden
                       className="flex items-center gap-2.5"
                     >
-                      <span className="flex h-5 w-5 items-center justify-center rounded-full border border-accent text-[10.5px] font-semibold text-accent">
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full border border-accent text-[12px] font-semibold text-accent">
                         {i + 1}
                       </span>
-                      <span className="text-[13px] text-ink-faint">
+                      <span className="text-[15px] text-ink-faint">
                         {item.title}
                       </span>
                     </li>
@@ -538,7 +538,7 @@ export function FinishTutorial({
           <div className="flex flex-col gap-4">
             <label
               htmlFor="tutorial-hide"
-              className="flex items-center justify-center gap-2.5 text-[13px] text-ink-muted"
+              className="flex items-center justify-center gap-2.5 text-[15px] text-ink-muted"
             >
               <input
                 id="tutorial-hide"
@@ -598,7 +598,7 @@ export function FinishTutorial({
             <button
               type="button"
               onClick={() => go(END)}
-              className="text-[13px] font-medium text-ink-muted transition-colors hover:text-ink"
+              className="-my-3 py-3 text-[15px] font-medium text-ink-muted transition-colors hover:text-ink"
             >
               Skip
             </button>
@@ -626,7 +626,7 @@ function ControlButton({
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
-      className="flex h-9 w-9 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-sunken hover:text-ink disabled:opacity-35"
+      className="flex h-11 w-11 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-sunken hover:text-ink disabled:opacity-35"
     >
       {children}
     </button>

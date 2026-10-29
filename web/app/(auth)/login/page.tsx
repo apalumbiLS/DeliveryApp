@@ -24,10 +24,10 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   if (!isSupabaseConfigured()) {
     return (
       <Card className="p-6">
-        <h1 className="text-[17px] font-semibold tracking-tight text-ink">
+        <h1 className="text-[18px] font-semibold tracking-tight text-ink">
           Sign in
         </h1>
-        <p className="mt-2 text-[12.5px] leading-relaxed text-ink-muted">
+        <p className="mt-2 text-[14px] leading-relaxed text-ink-muted">
           Supabase is not configured. Copy <code>web/.env.example</code> to{" "}
           <code>web/.env.local</code> and set{" "}
           <code>NEXT_PUBLIC_SUPABASE_URL</code> and{" "}
@@ -61,7 +61,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
   return (
     <Card className="p-6">
-      <h1 className="text-[17px] font-semibold tracking-tight text-ink">
+      <h1 className="text-[18px] font-semibold tracking-tight text-ink">
         Sign in
       </h1>
 
@@ -69,7 +69,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         <LoginForm next={next} />
       </div>
 
-      <p className="mt-5 border-t border-hairline-soft pt-4 text-[12px] leading-relaxed text-ink-muted">
+      <p className="mt-5 border-t border-hairline-soft pt-4 text-[13.5px] leading-relaxed text-ink-muted">
         No account yet?{" "}
         <Link
           href="/request-access"
