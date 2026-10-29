@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
+import { canSendForApproval } from "./approval";
 import type { Gate } from "./gates";
-import { canQueueInvite, CHECKOUT_INVITES_ENABLED } from "./invite";
 
 const PASSING: Gate[] = [
   { key: "items", label: "Items", state: "pass" },
@@ -10,36 +10,21 @@ const PASSING: Gate[] = [
   { key: "price", label: "Size & price", state: "pass" },
 ];
 
-function input(overrides: Partial<Parameters<typeof canQueueInvite>[0]> = {}) {
-  return {
-    status: "received",
-    gates: PASSING,
-    inviteRecipient: "customer@example.com",
-    inviteQueued: false,
-    ...overrides,
-  };
+function input(
+  overrides: Partial<Parameters<typeof canSendForApproval>[0]> = {},
+) {
+  return { status: "received", gates: PASSING, ...overrides };
 }
 
-describe("canQueueInvite", () => {
-  test("keeps actual checkout invitation delivery disabled for this prototype", () => {
-    expect(CHECKOUT_INVITES_ENABLED).toBe(false);
-  });
-
-  test("allows an order that is verified, addressed and still in the queue", () => {
-    expect(canQueueInvite(input())).toEqual({ ok: true });
+describe("canSendForApproval", () => {
+  test("allows an order that is verified and still in the queue", () => {
+    expect(canSendForApproval(input())).toEqual({ ok: true });
   });
 
   test("allows one that came from the review queue", () => {
-    expect(canQueueInvite(input({ status: "needs_review" }))).toEqual({
+    expect(canSendForApproval(input({ status: "needs_review" }))).toEqual({
       ok: true,
     });
-  });
-
-  test("refuses a second invite", () => {
-    const decision = canQueueInvite(input({ inviteQueued: true }));
-    expect(decision.ok).toBe(false);
-    if (decision.ok) return;
-    expect(decision.reason).toContain("already queued");
   });
 
   test("refuses while any gate is unresolved", () => {
@@ -49,7 +34,7 @@ describe("canQueueInvite", () => {
       const gates = PASSING.map((gate) =>
         gate.key === "price" ? { ...gate, state } : gate,
       );
-      const decision = canQueueInvite(input({ gates }));
+      const decision = canSendForApproval(input({ gates }));
       expect(decision.ok).toBe(false);
       if (decision.ok) continue;
       expect(decision.reason).toContain("size & price");
@@ -60,17 +45,10 @@ describe("canQueueInvite", () => {
     const gates = PASSING.map((gate) =>
       gate.key === "store" ? { ...gate, state: "warn" as const } : gate,
     );
-    expect(canQueueInvite(input({ gates }))).toEqual({ ok: true });
+    expect(canSendForApproval(input({ gates }))).toEqual({ ok: true });
   });
 
-  test("refuses when there is no address to invite", () => {
-    const decision = canQueueInvite(input({ inviteRecipient: null }));
-    expect(decision.ok).toBe(false);
-    if (decision.ok) return;
-    expect(decision.reason).toContain("no address");
-  });
-
-  test("refuses once the order has moved past the queue", () => {
+  test("refuses once the order has been sent or moved past the queue", () => {
     for (const status of [
       "awaiting_customer",
       "customer_confirmed",
@@ -80,7 +58,7 @@ describe("canQueueInvite", () => {
       "closed",
       "cancelled",
     ]) {
-      const decision = canQueueInvite(input({ status }));
+      const decision = canSendForApproval(input({ status }));
       expect(decision.ok).toBe(false);
       if (decision.ok) continue;
       expect(decision.reason).toContain(status);

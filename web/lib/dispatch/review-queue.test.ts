@@ -8,9 +8,30 @@ import {
 } from "@/lib/intake/__fixtures__/fake-supabase";
 
 import {
+  isQueueView,
   listInboundExceptions,
   loadInboundIntentPreview,
+  viewForStatus,
 } from "./review-queue";
+
+test("an order is listed in the tab its status belongs to", () => {
+  expect(viewForStatus("received")).toBe("review");
+  expect(viewForStatus("needs_review")).toBe("review");
+  // Sent for approval: it leaves the queue but stays findable.
+  expect(viewForStatus("awaiting_customer")).toBe("customer");
+  for (const status of ["customer_confirmed", "delivered", "cancelled"]) {
+    expect(viewForStatus(status)).toBe("all");
+  }
+});
+
+test("only the three tabs are accepted from the URL", () => {
+  for (const view of ["review", "customer", "all"]) {
+    expect(isQueueView(view)).toBe(true);
+  }
+  for (const value of ["", "ALL", "paid", undefined, ["all"]]) {
+    expect(isQueueView(value)).toBe(false);
+  }
+});
 
 test("review includes pending inbound mail but excludes resolved mail", async () => {
   const db = emptyDatabase();

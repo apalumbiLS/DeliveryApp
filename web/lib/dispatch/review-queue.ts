@@ -93,12 +93,14 @@ export type OrderDetail = {
     fields: ReturnType<typeof deliveryFields>;
   };
   /**
-   * Who the checkout invite would go to, or null when we have no address for
-   * them — in which case the console says so rather than offering a button that
-   * cannot work.
+   * Who the checkout email will go to once there is one, or null when we have
+   * no address for them. Sending for approval does not need it.
    */
   inviteRecipient: string | null;
-  /** True once an invite is sitting in the outbox. Nothing sends it yet. */
+  /**
+   * True when an earlier prototype queued a checkout invite. Nothing sends it;
+   * those orders were marked `awaiting_customer` without the customer hearing.
+   */
   inviteQueued: boolean;
   store: StoreOption | null;
   storeOptions: StoreOption[];
@@ -150,19 +152,75 @@ function addressLines(address: unknown): string | null {
 /** The statuses that mean "a dispatcher still has something to do". */
 const QUEUE_STATUSES = ["received", "needs_review"];
 
+/**
+ * The review page's list tabs: the queue itself, orders sent to the customer
+ * for approval, and every order.
+ */
+export const QUEUE_VIEWS = ["review", "customer", "all"] as const;
+
+export type QueueView = (typeof QUEUE_VIEWS)[number];
+
+/** Null means every status. */
+const VIEW_STATUSES: Record<QueueView, string[] | null> = {
+  review: QUEUE_STATUSES,
+  customer: ["awaiting_customer"],
+  all: null,
+};
+
+/** How many orders one tab lists. */
+export const VIEW_LIMIT = 50;
+
+export function isQueueView(value: unknown): value is QueueView {
+  return (QUEUE_VIEWS as readonly unknown[]).includes(value);
+}
+
+/** The tab an order belongs in, so the open order is in the list shown. */
+export function viewForStatus(status: string): QueueView {
+  if (QUEUE_STATUSES.includes(status)) return "review";
+  if (status === "awaiting_customer") return "customer";
+  return "all";
+}
+
+/** How many orders each tab holds — beyond the rows a tab lists. */
+export async function countQueueViews(
+  supabase: SupabaseClient,
+): Promise<Record<QueueView, number>> {
+  const counts = await Promise.all(
+    QUEUE_VIEWS.map((view) => {
+      const statuses = VIEW_STATUSES[view];
+      const query = supabase
+        .from("orders")
+        .select("id", { count: "exact", head: true });
+      return statuses ? query.in("status", statuses) : query;
+    }),
+  );
+
+  return {
+    review: counts[0].count ?? 0,
+    customer: counts[1].count ?? 0,
+    all: counts[2].count ?? 0,
+  };
+}
+
 export async function listQueue(
   supabase: SupabaseClient,
+  view: QueueView = "review",
 ): Promise<QueueEntry[]> {
-  const { data: orderData } = await supabase
+  const statuses = VIEW_STATUSES[view];
+  const base = supabase
     .from("orders")
     .select(
       "id, order_number, status, retailer, company_id, retailer_store_id, materials_subtotal_cents, created_at",
-    )
-    .in("status", QUEUE_STATUSES)
-    // Oldest first: the queue is a worklist, and the order that has waited
-    // longest is the one a customer is most likely chasing.
-    .order("created_at", { ascending: true })
-    .limit(50);
+    );
+
+  const { data: orderData } = await (
+    statuses ? base.in("status", statuses) : base
+  )
+    // The two worklists run oldest first: the order that has waited longest is
+    // the one a customer is most likely chasing. "All" is a record, so newest
+    // first.
+    .order("created_at", { ascending: view !== "all" })
+    .limit(VIEW_LIMIT);
 
   const orders = (orderData ?? []) as OrderRow[];
   if (orders.length === 0) return [];

@@ -84,9 +84,9 @@ The fee structure is not yet settled — that is why you enter fees rather than 
 
 ---
 
-## 4. Checkout invite — future phase, disabled for the client pilot
+## 4. Send for approval — no email yet
 
-The order detail's _Send checkout invite_ control is disabled. There is no outbound email or customer checkout page yet. Older prototype rows may show **"Invite queued — not sent"**; do not treat those records as customer contact. Collect missing site, store and materials details directly with the client until a confirmation flow is built and tested.
+The order detail's _Send for approval_ button moves the order to awaiting customer. It sends no email, and customers can't approve in the portal yet. There is no outbound email or customer checkout page yet. Older prototype rows may show **"Invite queued — not sent"**; do not treat those records as customer contact. Collect missing site, store and materials details directly with the client until a confirmation flow is built and tested.
 
 ### If the customer never completes checkout
 

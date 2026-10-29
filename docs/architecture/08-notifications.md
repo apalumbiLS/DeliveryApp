@@ -2,7 +2,7 @@
 
 Every message the system sends, what triggers it, and how duplicates are prevented.
 
-> **Status:** Customer checkout invitations are paused. Earlier prototype actions may have written `queued` notifications and moved orders to `awaiting_customer`, but **no email was sent** and no checkout page exists. Existing rows are preserved; the dispatcher action now refuses to queue new invites or advance the status. The Lowe's email-to-dispatcher milestone sends no customer or driver notification.
+> **Status:** Customer checkout invitations are paused. Earlier prototype actions may have written `queued` notifications and moved orders to `awaiting_customer`, but **no email was sent** and no checkout page exists. Existing rows are preserved; the dispatcher's _Send for approval_ action advances the status without queueing or sending an email. The Lowe's email-to-dispatcher milestone sends no customer or driver notification.
 
 ---
 

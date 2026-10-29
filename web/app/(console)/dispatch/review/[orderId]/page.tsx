@@ -2,9 +2,9 @@
  * The review queue, with one order open.
  *
  * This is the dispatcher's whole job: verify that we read the customer's cart
- * correctly, confirm where it is going, price it, and only then invite the
- * customer to pay. Every band below is one verification step, and the gate bar
- * at the bottom names whatever is still blocking.
+ * correctly, confirm where it is going, price it, and only then send it to the
+ * customer for approval. Every band below is one verification step, and the
+ * gate bar at the bottom names whatever is still blocking.
  *
  * Built from the approved mockup direction — `app/mockups/dispatch/review-queue.tsx`
  * — and composed from the same `components/console/` primitives the mockup uses.
@@ -23,6 +23,7 @@ import {
 } from "@/components/console/delivery-edit";
 import { DraftForm, DraftSaveButton } from "@/components/console/draft-form";
 import { IntroDialog } from "@/components/console/intro-dialog";
+import { QUEUE_VIEW_EMPTY, QueueTabs } from "@/components/console/queue-tabs";
 import { InboundExceptionList } from "@/components/console/inbound-exception-list";
 import {
   SizePicker,
@@ -31,25 +32,33 @@ import {
 import { Td, Th } from "@/components/console/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { AlertIcon, TagIcon } from "@/components/ui/icons";
+import { AlertIcon, CheckIcon, TagIcon } from "@/components/ui/icons";
 import {
-  queueCheckoutInvite,
+  sendForApproval,
   updateOrderDelivery,
   updateOrderQuote,
   updateOrderStore,
 } from "@/lib/dispatch/actions";
 import { blockingGate, type Gate } from "@/lib/dispatch/gates";
-import { CHECKOUT_INVITES_ENABLED } from "@/lib/dispatch/invite";
 import {
+  countQueueViews,
+  isQueueView,
   listInboundExceptions,
   listQueue,
   loadOrderDetail,
+  viewForStatus,
   type InboundException,
   type OrderDetail,
   type QueueEntry,
+  type QueueView,
 } from "@/lib/dispatch/review-queue";
 import { requireDispatcher } from "@/lib/dispatch/require-dispatcher";
 import { formatDistance } from "@/lib/geo";
+import {
+  orderStatusLabel,
+  orderStatusTone,
+  type OrderStatus,
+} from "@/lib/tokens";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -73,61 +82,114 @@ function shortAge(iso: string): string {
   return `${Math.round(minutes / (60 * 24))}d`;
 }
 
+/** What a row says about its order: the reading for the queue, the status after. */
+function entryBadge(entry: QueueEntry) {
+  if (entry.needsReview) {
+    return { tone: "danger" as const, text: "Could not read" };
+  }
+  if (entry.status === "received") {
+    return { tone: "info" as const, text: "Ready to verify" };
+  }
+  const status = entry.status as OrderStatus;
+  return {
+    tone: orderStatusTone[status] ?? "neutral",
+    text: orderStatusLabel[status] ?? entry.status,
+  };
+}
+
 function QueueRail({
+  view,
+  counts,
   queue,
   exceptions,
   selectedId,
 }: {
+  view: QueueView;
+  counts: Record<QueueView, number>;
   queue: QueueEntry[];
   exceptions: InboundException[];
   selectedId: string;
 }) {
+  // Only "All" is kept on the order links. The other two follow the order's
+  // own status, so an order that moves on — sent for approval, say — is still
+  // in the list it is shown with.
+  const suffix = view === "all" ? "?view=all" : "";
+
   return (
     <div className="w-60 shrink-0 border-r border-hairline-soft">
-      <div className="px-4 pt-3.5 pb-2 text-[10.5px] font-semibold tracking-widest text-ink-faint uppercase">
-        Waiting on you · {queue.length}
-      </div>
+      <QueueTabs
+        view={view}
+        counts={counts}
+        hrefFor={(option) => `/dispatch/review/${selectedId}?view=${option}`}
+      />
+      {queue.length === 0 ? (
+        <p className="border-t border-hairline-soft px-4 py-3 text-[11.5px] text-ink-faint">
+          {QUEUE_VIEW_EMPTY[view]}
+        </p>
+      ) : null}
       <ul>
-        {queue.map((entry) => (
-          <li
-            key={entry.id}
-            className={cn(
-              "border-t border-hairline-soft",
-              entry.id === selectedId && "bg-accent-soft/50",
-            )}
-          >
-            <Link
-              href={`/dispatch/review/${entry.id}`}
-              aria-current={entry.id === selectedId ? "true" : undefined}
-              className="block px-4 py-2.5 transition-colors hover:bg-card-muted"
+        {queue.map((entry) => {
+          const selected = entry.id === selectedId;
+          return (
+            <li
+              key={entry.id}
+              className={cn(
+                "border-t border-hairline-soft",
+                selected && "bg-accent-soft",
+              )}
             >
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[12.5px] font-medium tabular-nums">
-                  {entry.orderNumber}
-                </span>
-                <span className="text-[11px] text-ink-faint tabular-nums">
-                  {shortAge(entry.createdAt)}
-                </span>
-              </div>
-              <div className="mt-0.5 truncate text-[11.5px] text-ink-muted">
-                {entry.companyName} · {entry.retailerLabel}
-              </div>
-              <div className="mt-1 truncate text-[11.5px] text-ink">
-                {entry.storeName ?? "No store"}
-              </div>
-              <div className="mt-1.5 flex items-center gap-1.5">
-                <Badge tone={entry.needsReview ? "danger" : "info"} bordered>
-                  {entry.needsReview ? "Could not read" : "Ready to verify"}
-                </Badge>
-                <span className="truncate text-[11px] text-ink-faint">
-                  {entry.itemCount} item{entry.itemCount === 1 ? "" : "s"}
-                </span>
-              </div>
-            </Link>
-          </li>
-        ))}
+              {/* Every row carries the left bar, transparent unless selected, so
+                selecting one does not shift its text. */}
+              <Link
+                href={`/dispatch/review/${entry.id}${suffix}`}
+                aria-current={selected ? "true" : undefined}
+                className={cn(
+                  "block border-l-3 px-4 py-2.5 transition-colors",
+                  selected
+                    ? "border-accent"
+                    : "border-transparent hover:bg-card-muted",
+                )}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span
+                    className={cn(
+                      "text-[12.5px] tabular-nums",
+                      selected
+                        ? "font-semibold text-accent-soft-ink"
+                        : "font-medium",
+                    )}
+                  >
+                    {entry.orderNumber}
+                  </span>
+                  <span className="text-[11px] text-ink-faint tabular-nums">
+                    {shortAge(entry.createdAt)}
+                  </span>
+                </div>
+                <div className="mt-0.5 truncate text-[11.5px] text-ink-muted">
+                  {entry.companyName} · {entry.retailerLabel}
+                </div>
+                <div className="mt-1 truncate text-[11.5px] text-ink">
+                  {entry.storeName ?? "No store"}
+                </div>
+                <div className="mt-1.5 flex items-center gap-1.5">
+                  <Badge tone={entryBadge(entry).tone} bordered>
+                    {entryBadge(entry).text}
+                  </Badge>
+                  <span className="truncate text-[11px] text-ink-faint">
+                    {entry.itemCount} item{entry.itemCount === 1 ? "" : "s"}
+                  </span>
+                </div>
+              </Link>
+            </li>
+          );
+        })}
       </ul>
-      <InboundExceptionList entries={exceptions} />
+      {view === "all" && counts.all > queue.length ? (
+        <p className="border-t border-hairline-soft px-4 py-3 text-[11px] text-ink-faint">
+          Newest {queue.length} of {counts.all}.
+        </p>
+      ) : null}
+      {view === "review" ? <InboundExceptionList entries={exceptions} /> : null}
     </div>
   );
 }
@@ -652,24 +714,25 @@ function GateChip({ gate }: { gate: Gate }) {
   );
 }
 
-function inviteNote(detail: OrderDetail, blocker: Gate | null): string {
+/** The review queue's statuses. Past them, the order has been sent on. */
+const IN_REVIEW = ["received", "needs_review"];
+
+function gateNote(detail: OrderDetail, blocker: Gate | null): string | null {
   if (detail.inviteQueued) {
     return "An earlier prototype queued an invite, but no email was sent. Dispatcher follow-up is required.";
   }
 
-  if (!CHECKOUT_INVITES_ENABLED) {
-    return "Customer invitations are paused until checkout and outbound delivery are available. This order remains for dispatcher review.";
+  if (detail.order.status === "awaiting_customer") {
+    return "Waiting on the customer to approve in the portal. No email is sent yet.";
   }
 
-  if (!detail.inviteRecipient) {
-    return "No email address for this customer, so there is nobody to invite.";
-  }
+  if (!IN_REVIEW.includes(detail.order.status)) return null;
 
   if (blocker) {
-    return `The invite unlocks when ${blocker.label.toLowerCase()} is resolved.`;
+    return `Unlocks when ${blocker.label.toLowerCase()} is resolved.`;
   }
 
-  return "Ready to invite — the customer never sees a price we haven't checked.";
+  return "Ready to send — the customer never sees a price we haven't checked.";
 }
 
 function GateBar({
@@ -680,8 +743,8 @@ function GateBar({
   orderId: string;
 }) {
   const blocker = blockingGate(detail.gates);
-  const canInvite =
-    CHECKOUT_INVITES_ENABLED && !blocker && Boolean(detail.inviteRecipient);
+  const { status } = detail.order;
+  const note = gateNote(detail, blocker);
 
   return (
     <div className="sticky bottom-0 mt-3 border-t border-hairline bg-surface pt-3 pb-3">
@@ -692,9 +755,11 @@ function GateBar({
               <GateChip key={gate.key} gate={gate} />
             ))}
           </div>
-          <p className="mt-1.5 text-[11px] leading-relaxed text-ink-faint">
-            {inviteNote(detail, blocker)}
-          </p>
+          {note ? (
+            <p className="mt-1.5 text-[11px] leading-relaxed text-ink-faint">
+              {note}
+            </p>
+          ) : null}
         </div>
 
         {detail.inviteQueued ? (
@@ -704,13 +769,22 @@ function GateBar({
           <span className="shrink-0 rounded-control bg-warning-bg px-3 py-1.5 text-[11.5px] font-medium text-warning-ink">
             Invite queued — not sent
           </span>
-        ) : (
-          <form action={queueCheckoutInvite} className="shrink-0">
+        ) : IN_REVIEW.includes(status) ? (
+          <form action={sendForApproval} className="shrink-0">
             <input type="hidden" name="orderId" value={orderId} />
-            <Button type="submit" size="sm" disabled={!canInvite}>
-              Send checkout invite
+            <Button type="submit" size="sm" disabled={Boolean(blocker)}>
+              Send for approval
             </Button>
           </form>
+        ) : status === "awaiting_customer" ? (
+          <span className="flex shrink-0 items-center gap-1.5 rounded-control bg-success-bg px-3 py-1.5 text-[11.5px] font-medium text-success-ink">
+            <CheckIcon className="h-3.5 w-3.5" />
+            Sent for approval
+          </span>
+        ) : (
+          <Badge tone="neutral" bordered>
+            {orderStatusLabel[status as OrderStatus] ?? status}
+          </Badge>
         )}
       </div>
     </div>
@@ -721,19 +795,35 @@ export default async function ReviewOrderPage(
   props: PageProps<"/dispatch/review/[orderId]">,
 ) {
   const { orderId } = await props.params;
+  const { view: requested } = await props.searchParams;
   const { supabase } = await requireDispatcher();
 
-  const [queue, detail, exceptions] = await Promise.all([
-    listQueue(supabase),
-    loadOrderDetail(supabase, orderId),
-    listInboundExceptions(supabase),
-  ]);
-
+  const detail = await loadOrderDetail(supabase, orderId);
   if (!detail) notFound();
+
+  // A tab picked by hand wins; otherwise the list is the one the open order
+  // belongs in.
+  const view = isQueueView(requested)
+    ? requested
+    : viewForStatus(detail.order.status);
+
+  const [queue, counts, exceptions] = await Promise.all([
+    listQueue(supabase, view),
+    countQueueViews(supabase),
+    view === "review"
+      ? listInboundExceptions(supabase)
+      : Promise.resolve([] as InboundException[]),
+  ]);
 
   return (
     <div className="flex min-h-full">
-      <QueueRail queue={queue} exceptions={exceptions} selectedId={orderId} />
+      <QueueRail
+        view={view}
+        counts={counts}
+        queue={queue}
+        exceptions={exceptions}
+        selectedId={orderId}
+      />
       <div className="flex min-w-0 flex-1 flex-col px-4 py-3.5">
         {detail.order.retailer === "lowes" ? <LowesPricingSteps /> : null}
         <div className="space-y-3">

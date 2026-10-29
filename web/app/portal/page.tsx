@@ -26,7 +26,7 @@ export default async function PortalHomePage() {
   // RLS scopes the orders query to the signed-in customer's company.
   const { data: orders } = await supabase
     .from("orders")
-    .select("order_number")
+    .select("id, order_number")
     .eq("status", "awaiting_customer")
     .order("created_at", { ascending: false })
     .limit(1);
@@ -64,7 +64,7 @@ export default async function PortalHomePage() {
 
       {awaiting ? (
         <Link
-          href="/portal/orders"
+          href={`/portal/orders/${awaiting.id}`}
           className="flex items-center gap-3 rounded-card border border-hairline bg-accent-soft px-4 py-3.5 transition-colors hover:bg-accent-soft/70"
         >
           <StatusDot tone="warning" />

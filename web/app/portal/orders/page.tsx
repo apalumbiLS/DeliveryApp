@@ -1,17 +1,15 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { List, ListItem } from "@/components/ui/list";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusDot } from "@/components/ui/status-dot";
+import { portalStatusLabel } from "@/lib/portal/order";
 import { isRetailerId, RETAILERS } from "@/lib/retailers";
 import { createClient } from "@/lib/supabase/server";
-import {
-  orderStatusLabel,
-  orderStatusTone,
-  type OrderStatus,
-} from "@/lib/tokens";
+import { orderStatusTone, type OrderStatus } from "@/lib/tokens";
 
 export const metadata: Metadata = {
   title: "Orders",
@@ -69,29 +67,32 @@ export default async function PortalOrdersPage() {
       ) : (
         <List className="mt-5">
           {orders.map((order) => (
-            <ListItem key={order.id}>
-              <StatusDot tone={orderStatusTone[order.status]} />
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[13px] font-medium text-ink tabular-nums">
-                    {order.order_number}
-                  </span>
-                  <Badge tone={orderStatusTone[order.status]} bordered>
-                    {order.status === "awaiting_customer"
-                      ? "Dispatcher follow-up"
-                      : orderStatusLabel[order.status]}
-                  </Badge>
+            <ListItem key={order.id} className="p-0">
+              <Link
+                href={`/portal/orders/${order.id}`}
+                className="flex flex-1 items-center gap-3 px-4 py-3 transition-colors hover:bg-card-muted"
+              >
+                <StatusDot tone={orderStatusTone[order.status]} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[13px] font-medium text-ink tabular-nums">
+                      {order.order_number}
+                    </span>
+                    <Badge tone={orderStatusTone[order.status]} bordered>
+                      {portalStatusLabel(order.status)}
+                    </Badge>
+                  </div>
+                  <div className="mt-0.5 text-[12px] text-ink-faint">
+                    {retailerLabel(order.retailer)} ·{" "}
+                    {shortDate.format(new Date(order.created_at))}
+                  </div>
                 </div>
-                <div className="mt-0.5 text-[12px] text-ink-faint">
-                  {retailerLabel(order.retailer)} ·{" "}
-                  {shortDate.format(new Date(order.created_at))}
-                </div>
-              </div>
-              <span className="text-[13px] font-semibold text-ink tabular-nums">
-                {order.total_cents > 0
-                  ? money.format(order.total_cents / 100)
-                  : "Not priced"}
-              </span>
+                <span className="text-[13px] font-semibold text-ink tabular-nums">
+                  {order.total_cents > 0
+                    ? money.format(order.total_cents / 100)
+                    : "Not priced"}
+                </span>
+              </Link>
             </ListItem>
           ))}
         </List>
