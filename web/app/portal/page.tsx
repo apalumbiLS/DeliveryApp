@@ -69,8 +69,7 @@ export default async function PortalHomePage() {
         >
           <StatusDot tone="warning" />
           <span className="flex-1 text-[13px] font-medium text-accent-soft-ink">
-            Order {awaiting.order_number} needs dispatcher follow-up; no
-            checkout email has been sent
+            Order {awaiting.order_number} is ready to approve
           </span>
           <Chevron className="h-4 w-4 text-accent-soft-ink/70" />
         </Link>

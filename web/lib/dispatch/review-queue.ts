@@ -306,7 +306,7 @@ export async function loadOrderDetail(
       supabase
         .from("order_items")
         .select(
-          "id, line_no, description, model_number, store_sku, quantity, image_url",
+          "id, line_no, description, model_number, store_sku, quantity, image_url, product_url",
         )
         .eq("order_id", order.id)
         .order("line_no", { ascending: true }),
@@ -364,25 +364,29 @@ export async function loadOrderDetail(
     sitePoint,
   );
 
-  const links = productLinks(
-    emailResult.data as {
-      sender_email: string;
-      subject: string | null;
-      body_html: string | null;
-    } | null,
-  );
+  const itemRows = (itemsResult.data ?? []) as {
+    id: string;
+    line_no: number;
+    description: string;
+    model_number: string | null;
+    store_sku: string | null;
+    quantity: number;
+    image_url: string | null;
+    product_url: string | null;
+  }[];
 
-  const items = (
-    (itemsResult.data ?? []) as {
-      id: string;
-      line_no: number;
-      description: string;
-      model_number: string | null;
-      store_sku: string | null;
-      quantity: number;
-      image_url: string | null;
-    }[]
-  ).map((row) => ({
+  // Only orders finalized before 0012 lack stored links; parse the email for those.
+  const links = itemRows.some((row) => !row.product_url)
+    ? productLinks(
+        emailResult.data as {
+          sender_email: string;
+          subject: string | null;
+          body_html: string | null;
+        } | null,
+      )
+    : new Map<string, string>();
+
+  const items = itemRows.map((row) => ({
     id: row.id,
     lineNo: row.line_no,
     description: row.description,
@@ -390,7 +394,9 @@ export async function loadOrderDetail(
     storeSku: row.store_sku,
     quantity: row.quantity,
     imageUrl: row.image_url,
-    productUrl: row.store_sku ? (links.get(row.store_sku) ?? null) : null,
+    productUrl:
+      row.product_url ??
+      (row.store_sku ? (links.get(row.store_sku) ?? null) : null),
   }));
 
   const nearestMiles = alternatives.reduce<number | null>(
@@ -472,9 +478,8 @@ export async function loadOrderDetail(
 /**
  * Item links, read again from the stored email.
  *
- * `order_items` has no column for them, and reading them back from the original
- * means orders parsed before the parser kept links show them too. Keyed by the
- * retailer's item number rather than line position.
+ * The fallback for orders finalized before `order_items.product_url` existed
+ * (0012). Keyed by the retailer's item number rather than line position.
  */
 function productLinks(
   email: {

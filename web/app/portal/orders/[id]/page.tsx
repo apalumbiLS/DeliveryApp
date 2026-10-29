@@ -1,10 +1,14 @@
 /**
  * One order, as the customer sees it.
  *
- * Read-only for now: the items as we read them from the cart, where they are
- * bought and delivered, and the estimated price. Lowe's prints no prices, so
- * materials is a single estimate from Lowe's checkout rather than a price per
- * line, and the total is an estimate until the receipt is in.
+ * The items as we read them from the cart, where they are bought and
+ * delivered, and the estimated price. Lowe's prints no prices, so materials is
+ * a single estimate from Lowe's checkout rather than a price per line, and the
+ * total is an estimate until the receipt is in.
+ *
+ * While the order awaits approval, the customer confirms the on-site contact
+ * and instructions — the only delivery details they may change — and approves
+ * it here.
  */
 
 import type { Metadata } from "next";
@@ -12,8 +16,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 
+import { ApproveOrder } from "@/components/portal/approve-order";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { CheckIcon } from "@/components/ui/icons";
 import { PageHeader } from "@/components/ui/page-header";
 import {
   loadCustomerOrder,
@@ -64,7 +70,18 @@ function ItemsCard({ order }: { order: CustomerOrder }) {
           >
             <div className="min-w-0">
               <div className="text-[13px] leading-snug font-medium text-ink">
-                {item.description}
+                {item.productUrl ? (
+                  <a
+                    href={item.productUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline decoration-hairline underline-offset-2 transition-colors hover:text-accent hover:decoration-current"
+                  >
+                    {item.description}
+                  </a>
+                ) : (
+                  item.description
+                )}
               </div>
               <div className="mt-0.5 text-[11.5px] text-ink-faint">
                 {item.storeSku ? `Item #${item.storeSku}` : null}
@@ -82,7 +99,14 @@ function ItemsCard({ order }: { order: CustomerOrder }) {
   );
 }
 
-function PlacesCards({ order }: { order: CustomerOrder }) {
+function PlacesCards({
+  order,
+  approving,
+}: {
+  order: CustomerOrder;
+  /** The approve form below holds the contact and instructions, so these leave them out. */
+  approving: boolean;
+}) {
   const { delivery } = order;
   const street = [delivery.line1, delivery.line2].filter(Boolean).join(", ");
   const town = [
@@ -120,7 +144,7 @@ function PlacesCards({ order }: { order: CustomerOrder }) {
             "No address yet"
           )}
         </div>
-        {delivery.contactName || delivery.contactPhone ? (
+        {!approving && (delivery.contactName || delivery.contactPhone) ? (
           <div className="mt-2 text-[12px] text-ink-muted">
             <span className="text-ink-faint">On-site contact</span>{" "}
             {[delivery.contactName, delivery.contactPhone]
@@ -128,7 +152,7 @@ function PlacesCards({ order }: { order: CustomerOrder }) {
               .join(" · ")}
           </div>
         ) : null}
-        {delivery.instructions ? (
+        {!approving && delivery.instructions ? (
           <p className="mt-2 border-t border-hairline-soft pt-2 text-[12px] leading-relaxed text-ink-muted">
             {delivery.instructions}
           </p>
@@ -211,6 +235,7 @@ export default async function PortalOrderPage(
   if (!order) notFound();
 
   const store = order.store ? ` · ${order.store.name}` : "";
+  const approving = order.status === "awaiting_customer";
 
   return (
     <div>
@@ -233,9 +258,28 @@ export default async function PortalOrderPage(
       />
 
       <div className="mt-5 space-y-3">
+        {order.customerConfirmedAt ? (
+          <div className="flex items-center gap-2 rounded-card bg-success-bg px-4 py-3 text-[12.5px] font-medium text-success-ink">
+            <CheckIcon className="h-4 w-4 shrink-0" />
+            <span>
+              You approved this order on{" "}
+              {shortDate.format(new Date(order.customerConfirmedAt))}.
+            </span>
+          </div>
+        ) : null}
         <ItemsCard order={order} />
-        <PlacesCards order={order} />
+        <PlacesCards order={order} approving={approving} />
         <PriceCard order={order} />
+        {approving ? (
+          <ApproveOrder
+            orderId={order.id}
+            retailerLabel={order.retailerLabel}
+            totalLabel={money.format(order.price.totalCents / 100)}
+            contactName={order.delivery.contactName}
+            contactPhone={order.delivery.contactPhone}
+            instructions={order.delivery.instructions}
+          />
+        ) : null}
       </div>
     </div>
   );

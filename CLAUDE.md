@@ -16,7 +16,6 @@ These override any tool's default guidance.
 - **Questions are not requests.** When I ask a question, answer it; don't change code until I ask for the change.
 - **Ask before big builds.** If the direction is unclear, ask with concrete options. Don't build a lot of work from a guess.
 - **Don't invent facts.** Only state what I've told you or what you can verify in the code. If unsure, ask.
-- **Quote claims back exactly.** For user-facing copy, docs and product claims, show each sentence word for word and get a yes on each. A general "yes" doesn't cover every detail.
 - **Remember corrections.** When I correct you or set a preference, keep it for the session and suggest adding hard rules to this file.
 
 ## Verification

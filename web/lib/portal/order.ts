@@ -19,6 +19,8 @@ export type CustomerOrderItem = {
   storeSku: string | null;
   modelNumber: string | null;
   quantity: number;
+  /** The retailer's link for the item. Kept since migration 0012. */
+  productUrl: string | null;
 };
 
 export type CustomerOrder = {
@@ -27,6 +29,8 @@ export type CustomerOrder = {
   status: OrderStatus;
   retailerLabel: string;
   createdAt: string;
+  /** When the customer approved it, or null if they have not. */
+  customerConfirmedAt: string | null;
   store: { name: string; city: string | null; state: string | null } | null;
   siteLabel: string | null;
   delivery: ReturnType<typeof deliveryFields>;
@@ -57,18 +61,18 @@ type OrderRow = {
   tax_cents: number;
   total_cents: number;
   created_at: string;
+  customer_confirmed_at: string | null;
 };
 
 /**
  * The status as a customer should read it.
  *
- * `awaiting_customer` orders exist from an earlier prototype that never sent
- * the checkout email, so "Awaiting approval" would ask for something the
- * customer was never shown how to give.
+ * The console's "Awaiting approval" is written from the dispatcher's side; the
+ * customer is the one who approves, so it reads as their next step instead.
  */
 export function portalStatusLabel(status: OrderStatus): string {
   return status === "awaiting_customer"
-    ? "Dispatcher follow-up"
+    ? "Ready to approve"
     : orderStatusLabel[status];
 }
 
@@ -79,7 +83,7 @@ export async function loadCustomerOrder(
   const { data } = await supabase
     .from("orders")
     .select(
-      "id, order_number, status, retailer, retailer_store_id, site_id, delivery_address, delivery_instructions, materials_subtotal_cents, sizing_fee_cents, mileage_fee_cents, discount_cents, tax_cents, total_cents, created_at",
+      "id, order_number, status, retailer, retailer_store_id, site_id, delivery_address, delivery_instructions, materials_subtotal_cents, sizing_fee_cents, mileage_fee_cents, discount_cents, tax_cents, total_cents, created_at, customer_confirmed_at",
     )
     .eq("id", orderId)
     .maybeSingle();
@@ -90,7 +94,7 @@ export async function loadCustomerOrder(
   const [itemsResult, storeResult, siteResult] = await Promise.all([
     supabase
       .from("order_items")
-      .select("id, description, store_sku, model_number, quantity")
+      .select("id, description, store_sku, model_number, quantity, product_url")
       .eq("order_id", order.id)
       .order("line_no", { ascending: true }),
     order.retailer_store_id
@@ -116,6 +120,7 @@ export async function loadCustomerOrder(
       store_sku: string | null;
       model_number: string | null;
       quantity: number;
+      product_url: string | null;
     }[]
   ).map((row) => ({
     id: row.id,
@@ -123,6 +128,7 @@ export async function loadCustomerOrder(
     storeSku: row.store_sku,
     modelNumber: row.model_number,
     quantity: row.quantity,
+    productUrl: row.product_url,
   }));
 
   return {
@@ -133,6 +139,7 @@ export async function loadCustomerOrder(
       ? RETAILERS[order.retailer].label
       : order.retailer,
     createdAt: order.created_at,
+    customerConfirmedAt: order.customer_confirmed_at,
     store: storeResult.data as CustomerOrder["store"],
     siteLabel:
       (siteResult.data as { label: string | null } | null)?.label ?? null,
