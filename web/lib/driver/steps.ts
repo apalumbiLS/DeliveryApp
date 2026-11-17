@@ -73,3 +73,38 @@ export function hasReached(current: DriverStatus, status: DriverStatus) {
 export function isStepTarget(value: string): value is JobStep["to"] {
   return JOB_STEPS.some((step) => step.to === value);
 }
+
+export type StepEvent = {
+  from_status: string | null;
+  to_status: string;
+  created_at: string;
+};
+
+/**
+ * When the job was last posted and reached each driver step, from its status
+ * events in time order. Releasing a job from its driver posts it again and
+ * starts the steps over, so only the current run's times are kept.
+ */
+export function stepTimes(events: readonly StepEvent[]): {
+  postedAt: string | null;
+  reachedAt: Partial<Record<DriverStatus, string>>;
+  releasedAt: string | null;
+} {
+  let postedAt: string | null = null;
+  let releasedAt: string | null = null;
+  let reachedAt: Partial<Record<DriverStatus, string>> = {};
+
+  for (const event of events) {
+    if (event.to_status === "driver_requested") {
+      postedAt = event.created_at;
+      reachedAt = {};
+      if (event.from_status !== null && isDriverStatus(event.from_status)) {
+        releasedAt = event.created_at;
+      }
+    } else if (isDriverStatus(event.to_status)) {
+      reachedAt[event.to_status] = event.created_at;
+    }
+  }
+
+  return { postedAt, reachedAt, releasedAt };
+}

@@ -12,7 +12,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { isRetailerId, RETAILERS } from "@/lib/retailers";
 
-import { isDriverStatus, type DriverStatus } from "./steps";
+import {
+  isDriverStatus,
+  stepTimes,
+  type DriverStatus,
+  type StepEvent,
+} from "./steps";
 
 export type JobItem = {
   id: string;
@@ -182,7 +187,7 @@ export async function loadDriverJob(
       .order("line_no", { ascending: true }),
     supabase
       .from("order_status_events")
-      .select("to_status, created_at")
+      .select("from_status, to_status, created_at")
       .eq("order_id", order.id)
       .order("created_at", { ascending: true }),
   ]);
@@ -197,17 +202,7 @@ export async function loadDriverJob(
 
   const address = order.delivery_address ?? {};
 
-  const reachedAt: DriverJob["reachedAt"] = {};
-  for (const event of (eventsResult.data ?? []) as {
-    to_status: string;
-    created_at: string;
-  }[]) {
-    // The latest time wins: a job released back to drivers passes through
-    // the same steps again.
-    if (isDriverStatus(event.to_status)) {
-      reachedAt[event.to_status] = event.created_at;
-    }
-  }
+  const { reachedAt } = stepTimes((eventsResult.data ?? []) as StepEvent[]);
 
   return {
     id: order.id,

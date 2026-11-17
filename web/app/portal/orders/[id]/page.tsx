@@ -26,9 +26,15 @@ import {
   portalStatusLabel,
   type CustomerOrder,
 } from "@/lib/portal/order";
+import { JOB_STEPS } from "@/lib/driver/steps";
 import { formatPhone } from "@/lib/phone";
+import {
+  loadDeliveryProgress,
+  type DeliveryProgress,
+} from "@/lib/portal/progress";
 import { createClient } from "@/lib/supabase/server";
-import { orderStatusTone } from "@/lib/tokens";
+import { orderStatusLabel, orderStatusTone } from "@/lib/tokens";
+import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
   title: "Order",
@@ -42,6 +48,23 @@ const money = new Intl.NumberFormat("en-US", {
 });
 
 const shortDate = new Intl.DateTimeFormat("en-US", { dateStyle: "medium" });
+
+const stamp = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+});
+
+/** From posting to drivers through delivery: where the progress card shows. */
+const DELIVERY_STAGES = [
+  "driver_requested",
+  "driver_assigned",
+  "driver_at_store",
+  "items_purchased",
+  "en_route",
+  "delivered",
+];
 
 function SectionCard({
   title,
@@ -166,6 +189,79 @@ function PlacesCards({
   );
 }
 
+/** Where the driver has got to, and the photo of the delivered materials. */
+function ProgressCard({ progress }: { progress: DeliveryProgress }) {
+  const rows = [
+    {
+      key: "driver_requested",
+      label: orderStatusLabel.driver_requested,
+      at: progress.postedAt,
+    },
+    ...(["driver_assigned", ...JOB_STEPS.map((step) => step.to)] as const).map(
+      (status) => ({
+        key: status,
+        label: orderStatusLabel[status],
+        at: progress.reachedAt[status] ?? null,
+      }),
+    ),
+  ];
+  const photo = progress.photos[0];
+
+  return (
+    <SectionCard title="Delivery progress">
+      <ol>
+        {rows.map((row) => (
+          <li key={row.key} className="flex items-center gap-2.5 py-1.5">
+            {row.at ? (
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-success-bg text-success-ink">
+                <CheckIcon className="h-3 w-3" />
+              </span>
+            ) : (
+              <span className="h-5 w-5 shrink-0 rounded-full border border-hairline" />
+            )}
+            <span
+              className={cn(
+                "min-w-0 flex-1 text-[14px]",
+                row.at ? "text-ink" : "text-ink-faint",
+              )}
+            >
+              {row.label}
+            </span>
+            {row.at ? (
+              <span className="shrink-0 text-[12.5px] text-ink-faint tabular-nums">
+                {stamp.format(new Date(row.at))}
+              </span>
+            ) : null}
+          </li>
+        ))}
+      </ol>
+
+      {photo ? (
+        <div className="mt-3 border-t border-hairline-soft pt-3">
+          <div className="text-[13.5px] font-medium text-ink">
+            Delivery photo
+          </div>
+          <a
+            href={photo.url}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-2 block overflow-hidden rounded-field border border-hairline bg-card-muted"
+          >
+            {/* Redirects to a freshly signed URL in private storage, which
+                next/image cannot optimize. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={photo.url}
+              alt="The delivered materials, open full size"
+              className="max-h-96 w-full object-cover text-[13px] text-ink-muted"
+            />
+          </a>
+        </div>
+      ) : null}
+    </SectionCard>
+  );
+}
+
 function PriceRow({
   label,
   hint,
@@ -240,6 +336,9 @@ export default async function PortalOrderPage(
 
   const store = order.store ? ` · ${order.store.name}` : "";
   const approving = order.status === "awaiting_customer";
+  const progress = DELIVERY_STAGES.includes(order.status)
+    ? await loadDeliveryProgress(supabase, order.id)
+    : null;
 
   return (
     <div>
@@ -271,6 +370,7 @@ export default async function PortalOrderPage(
             </span>
           </div>
         ) : null}
+        {progress ? <ProgressCard progress={progress} /> : null}
         <ItemsCard order={order} />
         <PlacesCards order={order} approving={approving} />
         <PriceCard order={order} />

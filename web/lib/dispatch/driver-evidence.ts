@@ -9,7 +9,11 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { isDriverStatus, type DriverStatus } from "@/lib/driver/steps";
+import {
+  stepTimes,
+  type DriverStatus,
+  type StepEvent,
+} from "@/lib/driver/steps";
 
 export type EvidenceItem = {
   id: string;
@@ -52,28 +56,9 @@ export async function loadDriverEvidence(
     );
   }
 
-  const reachedAt: DriverEvidence["reachedAt"] = {};
-  let releasedAt: string | null = null;
-  for (const event of (eventsResult.data ?? []) as {
-    from_status: string | null;
-    to_status: string;
-    created_at: string;
-  }[]) {
-    if (isDriverStatus(event.to_status)) {
-      reachedAt[event.to_status] = event.created_at;
-    }
-    // A release starts the steps over for the next driver.
-    if (
-      event.to_status === "driver_requested" &&
-      event.from_status !== null &&
-      isDriverStatus(event.from_status)
-    ) {
-      releasedAt = event.created_at;
-      for (const status of Object.keys(reachedAt) as DriverStatus[]) {
-        delete reachedAt[status];
-      }
-    }
-  }
+  const { reachedAt, releasedAt } = stepTimes(
+    (eventsResult.data ?? []) as StepEvent[],
+  );
 
   const rows = (attachmentsResult.data ?? []) as {
     id: string;
