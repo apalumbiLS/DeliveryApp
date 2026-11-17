@@ -238,11 +238,12 @@ export function FinishTutorial({
         lowes ? <LowesSetStoreDemo paused={isPaused} /> : null,
     },
     {
-      title: "Shop Pickup Today items",
+      title: "Add Pickup Today items",
       ms: 5500,
       caption: (
         <>
-          <TapOrClick /> Pickup Today when you search
+          <TapOrClick /> Pickup Today when you search, then add what you need to
+          your cart
         </>
       ),
       visual: () => (lowes ? <LowesPickupTodayShot /> : null),
