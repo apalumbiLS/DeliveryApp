@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, CirclePlay } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -471,10 +471,21 @@ export function FinishStep({
   const [tutorialOpen, setTutorialOpen] = useState(
     () => !readExplainerHidden(),
   );
-  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">(
-    "idle",
-  );
+  // "again" is after a copy: the check has had its moment, and the button
+  // offers another copy rather than looking spent.
+  const [copyState, setCopyState] = useState<
+    "idle" | "copied" | "again" | "failed"
+  >("idle");
+  const [copies, setCopies] = useState(0);
   const retailer = RETAILERS[retailerId];
+
+  // Restarts on every copy, so a second click shows the check for its own
+  // full three seconds.
+  useEffect(() => {
+    if (copyState !== "copied") return;
+    const timer = window.setTimeout(() => setCopyState("again"), 3000);
+    return () => window.clearTimeout(timer);
+  }, [copyState, copies]);
 
   async function copy() {
     if (!alias) return;
@@ -482,6 +493,7 @@ export function FinishStep({
     try {
       await navigator.clipboard.writeText(alias);
       setCopyState("copied");
+      setCopies((count) => count + 1);
     } catch {
       // Clipboard access can be denied. The address is on screen to copy by
       // hand, and the store button still appears so nobody is stuck.
@@ -510,11 +522,20 @@ export function FinishStep({
           <p className="text-[14px] text-ink-muted">
             You&apos;ll paste this as the recipient
           </p>
-          <p className="mt-2 rounded-field border border-hairline bg-card px-3 py-2.5 font-mono text-[15px] break-all text-ink select-all">
-            {alias}
-          </p>
-
-          <div className="mt-4 flex flex-col gap-2.5 sm:flex-row">
+          {/* Phones stack the full address over a full-width button. Wider
+              screens keep the button beside the address, which may truncate:
+              copying it is the point, not reading it. */}
+          <div className="mt-2 flex flex-col gap-2.5 sm:flex-row">
+            <p
+              title={alias}
+              className="flex min-w-0 items-center rounded-field border border-hairline bg-card px-3 py-2.5 font-mono text-[15px] text-ink select-all sm:flex-1"
+            >
+              <span className="min-w-0 break-all sm:truncate sm:break-normal">
+                {alias}
+              </span>
+            </p>
+            {/* A minimum width, so the label changing to "Copied" does not
+                resize the address beside it. */}
             <button
               type="button"
               onClick={copy}
@@ -523,7 +544,7 @@ export function FinishStep({
                   intent: copyState === "idle" ? "primary" : "secondary",
                   size: "lg",
                 }),
-                "w-full sm:w-auto",
+                "w-full sm:w-auto sm:min-w-40 sm:shrink-0",
               )}
             >
               {copyState === "copied" ? (
@@ -534,25 +555,10 @@ export function FinishStep({
               ) : (
                 <>
                   <CopyIcon className="h-4 w-4" />
-                  Copy address
+                  {copyState === "again" ? "Copy again" : "Copy address"}
                 </>
               )}
             </button>
-
-            {copyState === "idle" ? null : (
-              <a
-                href={store.store.storeUrl ?? retailer.homeUrl}
-                target="_blank"
-                rel="noreferrer"
-                className={cn(
-                  button({ intent: "primary", size: "lg" }),
-                  "w-full justify-between sm:w-auto",
-                )}
-              >
-                Open {store.store.name}
-                <ExternalLinkIcon className="h-4 w-4" />
-              </a>
-            )}
           </div>
 
           {copyState === "failed" ? (
@@ -560,6 +566,23 @@ export function FinishStep({
               Couldn&apos;t copy. Copy the address by hand.
             </p>
           ) : null}
+
+          {copyState === "idle" ? null : (
+            <a
+              href={store.store.storeUrl ?? retailer.homeUrl}
+              target="_blank"
+              rel="noreferrer"
+              className={cn(
+                button({ intent: "primary", size: "lg" }),
+                // Centered under the address row on wider screens, so it reads
+                // as the next step rather than a third control in that row.
+                "mt-4 flex w-full justify-between sm:mx-auto sm:w-fit sm:justify-center",
+              )}
+            >
+              Open {store.store.name}
+              <ExternalLinkIcon className="h-4 w-4" />
+            </a>
+          )}
         </div>
       ) : (
         <p className="mt-5 rounded-field bg-warning-bg px-3 py-2 text-[14px] leading-relaxed text-warning-ink">
