@@ -59,7 +59,9 @@ export async function proxy(request: NextRequest) {
   // request is the "full authorization in the proxy" the docs warn against.
   // Each console layout enforces its own role, and RLS enforces the data.
   const guarded =
-    pathname.startsWith("/portal") || pathname.startsWith("/admin");
+    pathname.startsWith("/portal") ||
+    pathname.startsWith("/admin") ||
+    pathname.startsWith("/driver");
 
   if (!signedIn && guarded) {
     const signIn = request.nextUrl.clone();

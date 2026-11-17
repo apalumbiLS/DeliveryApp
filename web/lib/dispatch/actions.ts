@@ -8,6 +8,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 import {
   parseDeliveryDraft,
+  parsePayoutDraft,
   parseQuoteDraft,
   saveDispatcherDraft,
   type DraftResult,
@@ -92,6 +93,33 @@ export async function updateOrderDelivery(
 }
 
 /**
+ * The driver payout. Its own call rather than part of the quote, because it
+ * stays editable after review — until a driver accepts.
+ */
+export async function updateOrderPayout(
+  _previous: DraftResult,
+  formData: FormData,
+): Promise<DraftResult> {
+  const { supabase } = await requireDispatcher();
+  const orderId = orderIdFrom(formData);
+  if (!orderId) return { outcome: "error" };
+  const draft = parsePayoutDraft(formData);
+  if (!draft.ok) return { outcome: "invalid" };
+
+  let saved = false;
+  try {
+    const { data, error } = await supabase.rpc("set_driver_payout", {
+      p_order_id: orderId,
+      p_payout_cents: draft.value,
+    });
+    saved = !error && data === orderId;
+  } catch {
+    saved = false;
+  }
+  return finishDraftUpdate(orderId, saved);
+}
+
+/**
  * Send a verified order to the customer for approval.
  *
  * Moves it to `awaiting_customer` and records who did it. **No email goes out
@@ -142,6 +170,22 @@ export async function sendForApproval(formData: FormData): Promise<void> {
 
   // Either way the page should show what is true now. Back to the order's
   // plain URL, so a tab picked by hand gives way to the one the order is in.
+  revalidatePath(`/dispatch/review/${orderId}`);
+  revalidatePath("/dispatch/review");
+  redirect(`/dispatch/review/${orderId}`);
+}
+
+/**
+ * Take a job back from its driver and post it to drivers again, at the same
+ * link. Allowed at any step before delivery; `release_driver` checks that.
+ */
+export async function releaseDriver(formData: FormData): Promise<void> {
+  const { supabase } = await requireDispatcher();
+  const orderId = orderIdFrom(formData);
+  if (!orderId) return;
+
+  await supabase.rpc("release_driver", { p_order_id: orderId });
+
   revalidatePath(`/dispatch/review/${orderId}`);
   revalidatePath("/dispatch/review");
   redirect(`/dispatch/review/${orderId}`);

@@ -24,6 +24,10 @@ Design and architecture documentation for the construction-site delivery MVP.
 | 11  | [Deployment](architecture/11-deployment-and-environments.md)      | Environments and release process               |
 | 12  | [Deferred work](architecture/12-deferred-and-extension-points.md) | What we're not building, and its hook          |
 
+## Backlog
+
+**[backlog.md](backlog.md)** — planned work that isn't finished yet. Check it before starting new work.
+
 ## Other directories
 
 - **[adr/README.md](adr/README.md)** — Architecture Decision Records. One per locked decision, with the alternatives we rejected and why.

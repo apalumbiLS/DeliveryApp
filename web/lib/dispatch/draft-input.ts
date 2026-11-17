@@ -70,6 +70,15 @@ export function parseQuoteDraft(form: FormData): Result<QuoteDraft> {
   };
 }
 
+/** The driver payout, in dollars. Blank is not a payout. */
+export function parsePayoutDraft(form: FormData): Result<number> {
+  const raw = text(form, "payout");
+  const amount = raw ? cents(raw) : null;
+  return amount === null
+    ? { ok: false, error: "Enter the payout in dollars." }
+    : { ok: true, value: amount };
+}
+
 export function parseDeliveryDraft(form: FormData): Result<DeliveryDraft> {
   const line1 = text(form, "line1");
   const line2 = text(form, "line2");

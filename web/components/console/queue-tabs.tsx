@@ -7,12 +7,18 @@ import { cn } from "@/lib/utils";
 export const QUEUE_VIEW_LABELS: Record<QueueView, string> = {
   review: "To review",
   customer: "Awaiting approval",
+  finding: "Finding driver",
+  driver: "With driver",
+  delivered: "Delivered",
   all: "All",
 };
 
 export const QUEUE_VIEW_EMPTY: Record<QueueView, string> = {
   review: "Nothing to review.",
   customer: "Nothing awaiting approval.",
+  finding: "No jobs waiting for a driver.",
+  driver: "No jobs with a driver.",
+  delivered: "Nothing delivered yet.",
   all: "No orders yet.",
 };
 

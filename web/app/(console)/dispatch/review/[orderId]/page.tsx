@@ -31,6 +31,8 @@ import {
   SubmitWhenSaved,
 } from "@/components/console/draft-form";
 import { IntroDialog } from "@/components/console/intro-dialog";
+import { JobLink } from "@/components/console/job-link";
+import { ReleaseDriver } from "@/components/console/release-driver";
 import { QUEUE_VIEW_EMPTY, QueueTabs } from "@/components/console/queue-tabs";
 import { InboundExceptionList } from "@/components/console/inbound-exception-list";
 import {
@@ -43,10 +45,15 @@ import { AlertIcon, CheckIcon, TagIcon } from "@/components/ui/icons";
 import {
   sendForApproval,
   updateOrderDelivery,
+  updateOrderPayout,
   updateOrderQuote,
   updateOrderStore,
 } from "@/lib/dispatch/actions";
 import { blockingGate, type Gate } from "@/lib/dispatch/gates";
+import {
+  defaultDriverPayoutCents,
+  isPayoutLocked,
+} from "@/lib/dispatch/payout";
 import {
   countQueueViews,
   isQueueView,
@@ -563,93 +570,98 @@ function DeliveryBand({
             ) : null}
           </DraftForm>
 
-          <DraftForm
-            label="size & price"
-            action={updateOrderQuote}
-            savedKey={[
-              detail.order.deliverySize,
-              detail.order.materialsCents,
-              detail.order.sizingCents,
-              detail.order.mileageCents,
-            ].join(":")}
-            messages={{
-              invalid: "Pick a size and enter valid dollar amounts.",
-              error: "Pricing was not saved. Refresh and try again.",
-            }}
-          >
-            <input type="hidden" name="orderId" value={orderId} />
-            <span className="text-[11.5px] font-medium text-ink-muted">
-              Delivery size
-            </span>
+          <div>
+            <DraftForm
+              label="size & price"
+              action={updateOrderQuote}
+              savedKey={[
+                detail.order.deliverySize,
+                detail.order.materialsCents,
+                detail.order.sizingCents,
+                detail.order.mileageCents,
+              ].join(":")}
+              messages={{
+                invalid: "Pick a size and enter valid dollar amounts.",
+                error: "Pricing was not saved. Refresh and try again.",
+              }}
+            >
+              <input type="hidden" name="orderId" value={orderId} />
+              <span className="text-[11.5px] font-medium text-ink-muted">
+                Delivery size
+              </span>
 
-            <div className="mt-1.5">
-              <SizePicker
-                name="deliverySize"
-                selected={
-                  (detail.order.deliverySize as DeliverySize | null) ?? null
-                }
-              />
-            </div>
-
-            <div className="mt-2.5 border-t border-hairline-soft pt-1.5">
-              <div className="flex items-center justify-between gap-2 py-1">
-                <span className="text-[11.5px] text-ink-muted">
-                  Materials
-                  <span className="ml-1.5 text-[10.5px] text-ink-faint">
-                    from Lowe&apos;s checkout
-                  </span>
-                </span>
-                <input
-                  name="materials"
-                  inputMode="decimal"
-                  defaultValue={
-                    detail.order.materialsCents
-                      ? dollars(detail.order.materialsCents)
-                      : ""
+              <div className="mt-1.5">
+                <SizePicker
+                  name="deliverySize"
+                  selected={
+                    (detail.order.deliverySize as DeliverySize | null) ?? null
                   }
-                  placeholder="Not priced"
-                  className="w-20 rounded-control border border-hairline bg-card px-2 py-1 text-right text-[12px] tabular-nums"
                 />
               </div>
 
-              <div className="flex items-center justify-between gap-2 py-1">
-                <span className="text-[11.5px] text-ink-muted">Sizing fee</span>
-                <input
-                  name="sizing"
-                  inputMode="decimal"
-                  defaultValue={dollars(detail.order.sizingCents)}
-                  className="w-20 rounded-control border border-hairline bg-card px-2 py-1 text-right text-[12px] tabular-nums"
-                />
+              <div className="mt-2.5 border-t border-hairline-soft pt-1.5">
+                <div className="flex items-center justify-between gap-2 py-1">
+                  <span className="text-[11.5px] text-ink-muted">
+                    Materials
+                    <span className="ml-1.5 text-[10.5px] text-ink-faint">
+                      from Lowe&apos;s checkout
+                    </span>
+                  </span>
+                  <input
+                    name="materials"
+                    inputMode="decimal"
+                    defaultValue={
+                      detail.order.materialsCents
+                        ? dollars(detail.order.materialsCents)
+                        : ""
+                    }
+                    placeholder="Not priced"
+                    className="w-20 rounded-control border border-hairline bg-card px-2 py-1 text-right text-[12px] tabular-nums"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between gap-2 py-1">
+                  <span className="text-[11.5px] text-ink-muted">
+                    Sizing fee
+                  </span>
+                  <input
+                    name="sizing"
+                    inputMode="decimal"
+                    defaultValue={dollars(detail.order.sizingCents)}
+                    className="w-20 rounded-control border border-hairline bg-card px-2 py-1 text-right text-[12px] tabular-nums"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between gap-2 py-1">
+                  <span className="text-[11.5px] text-ink-muted">
+                    Mileage fee
+                  </span>
+                  <input
+                    name="mileage"
+                    inputMode="decimal"
+                    defaultValue={dollars(detail.order.mileageCents)}
+                    className="w-20 rounded-control border border-hairline bg-card px-2 py-1 text-right text-[12px] tabular-nums"
+                  />
+                </div>
+
+                <div className="mt-1 flex items-center justify-between border-t border-hairline-soft pt-1.5">
+                  <span className="text-[12px] font-semibold text-ink">
+                    Total
+                  </span>
+                  <span className="text-[14px] font-semibold text-ink tabular-nums">
+                    {money.format(detail.order.totalCents / 100)}
+                  </span>
+                </div>
+
+                <DraftStatus className="mt-2" />
+
+                <p className="mt-1.5 text-[10.5px] leading-relaxed text-ink-faint">
+                  Fees are entered by hand until the pricing model is settled.
+                </p>
               </div>
-
-              <div className="flex items-center justify-between gap-2 py-1">
-                <span className="text-[11.5px] text-ink-muted">
-                  Mileage fee
-                </span>
-                <input
-                  name="mileage"
-                  inputMode="decimal"
-                  defaultValue={dollars(detail.order.mileageCents)}
-                  className="w-20 rounded-control border border-hairline bg-card px-2 py-1 text-right text-[12px] tabular-nums"
-                />
-              </div>
-
-              <div className="mt-1 flex items-center justify-between border-t border-hairline-soft pt-1.5">
-                <span className="text-[12px] font-semibold text-ink">
-                  Total
-                </span>
-                <span className="text-[14px] font-semibold text-ink tabular-nums">
-                  {money.format(detail.order.totalCents / 100)}
-                </span>
-              </div>
-
-              <DraftStatus className="mt-2" />
-
-              <p className="mt-1.5 text-[10.5px] leading-relaxed text-ink-faint">
-                Fees are entered by hand until the pricing model is settled.
-              </p>
-            </div>
-          </DraftForm>
+            </DraftForm>
+            <PayoutForm detail={detail} orderId={orderId} />
+          </div>
         </div>
 
         <DeliveryEditPanel>
@@ -714,6 +726,76 @@ function DeliveryBand({
   );
 }
 
+/**
+ * What the driver is paid. Not charged to the customer and never shown in the
+ * portal. Editable until a driver accepts, then locked at what they saw.
+ */
+function PayoutForm({
+  detail,
+  orderId,
+}: {
+  detail: OrderDetail;
+  orderId: string;
+}) {
+  const { order } = detail;
+  const saved = order.driverPayoutCents;
+  const payout =
+    saved ?? defaultDriverPayoutCents(order.sizingCents, order.mileageCents);
+  const label = (
+    <span className="text-[11.5px] text-ink-muted">
+      Driver payout
+      <span className="ml-1.5 text-[10.5px] text-ink-faint">
+        not charged to the customer
+      </span>
+    </span>
+  );
+
+  if (isPayoutLocked(order.status)) {
+    return (
+      <div className="mt-2.5 border-t border-hairline-soft pt-1.5">
+        <div className="flex items-center justify-between gap-2 py-1">
+          {label}
+          <span className="text-[12px] font-medium text-ink tabular-nums">
+            {money.format(payout / 100)}
+          </span>
+        </div>
+        <p className="mt-1 text-[10.5px] leading-relaxed text-ink-faint">
+          Locked: the driver accepted this amount.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <DraftForm
+      label="driver payout"
+      action={updateOrderPayout}
+      savedKey={`${saved ?? "default"}:${payout}`}
+      messages={{
+        invalid: "Enter the payout in dollars.",
+        error: "Payout was not saved. Refresh and try again.",
+      }}
+      className="mt-2.5 border-t border-hairline-soft pt-1.5"
+    >
+      <input type="hidden" name="orderId" value={orderId} />
+      <div className="flex items-center justify-between gap-2 py-1">
+        {label}
+        <input
+          name="payout"
+          inputMode="decimal"
+          defaultValue={dollars(payout)}
+          className="w-20 rounded-control border border-hairline bg-card px-2 py-1 text-right text-[12px] tabular-nums"
+        />
+      </div>
+      <DraftStatus className="mt-2" />
+      <p className="mt-1 text-[10.5px] leading-relaxed text-ink-faint">
+        {saved === null ? "Defaults to 90% of the delivery fees. " : null}
+        Changeable until a driver accepts.
+      </p>
+    </DraftForm>
+  );
+}
+
 function GateChip({ gate }: { gate: Gate }) {
   return (
     <span className="flex items-center gap-1.5">
@@ -729,6 +811,18 @@ function GateChip({ gate }: { gate: Gate }) {
 /** The review queue's statuses. Past them, the order has been sent on. */
 const IN_REVIEW = ["received", "needs_review"];
 
+/** From a driver accepting the job up to delivery. */
+const WITH_DRIVER = [
+  "driver_assigned",
+  "driver_at_store",
+  "items_purchased",
+  "en_route",
+];
+
+function driverLabel(driver: NonNullable<OrderDetail["driver"]>): string {
+  return driver.phone ? `${driver.name} · ${driver.phone}` : driver.name;
+}
+
 function gateNote(detail: OrderDetail, blocker: Gate | null): string | null {
   if (detail.inviteQueued) {
     return "An earlier prototype queued an invite, but no email was sent. Dispatcher follow-up is required.";
@@ -736,6 +830,18 @@ function gateNote(detail: OrderDetail, blocker: Gate | null): string | null {
 
   if (detail.order.status === "awaiting_customer") {
     return "Waiting on the customer to approve in the portal. No email is sent yet.";
+  }
+
+  if (detail.order.status === "driver_requested") {
+    return "Posted to drivers. No text goes out yet, so copy the job link and send it.";
+  }
+
+  if (WITH_DRIVER.includes(detail.order.status) && detail.driver) {
+    return `With ${driverLabel(detail.driver)}.`;
+  }
+
+  if (detail.order.status === "delivered" && detail.driver) {
+    return `Delivered by ${driverLabel(detail.driver)}.`;
   }
 
   if (!IN_REVIEW.includes(detail.order.status)) return null;
@@ -796,9 +902,20 @@ function GateBar({
               Sent for approval
             </span>
           ) : (
-            <Badge tone="neutral" bordered>
-              {orderStatusLabel[status as OrderStatus] ?? status}
-            </Badge>
+            <>
+              {status === "driver_requested" ? (
+                <JobLink orderId={orderId} />
+              ) : null}
+              {WITH_DRIVER.includes(status) ? (
+                <ReleaseDriver orderId={orderId} />
+              ) : null}
+              <Badge
+                tone={orderStatusTone[status as OrderStatus] ?? "neutral"}
+                bordered
+              >
+                {orderStatusLabel[status as OrderStatus] ?? status}
+              </Badge>
+            </>
           )}
         </div>
       </div>

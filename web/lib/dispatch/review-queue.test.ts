@@ -19,13 +19,30 @@ test("an order is listed in the tab its status belongs to", () => {
   expect(viewForStatus("needs_review")).toBe("review");
   // Sent for approval: it leaves the queue but stays findable.
   expect(viewForStatus("awaiting_customer")).toBe("customer");
-  for (const status of ["customer_confirmed", "delivered", "cancelled"]) {
+  expect(viewForStatus("driver_requested")).toBe("finding");
+  for (const status of [
+    "driver_assigned",
+    "driver_at_store",
+    "items_purchased",
+    "en_route",
+  ]) {
+    expect(viewForStatus(status)).toBe("driver");
+  }
+  expect(viewForStatus("delivered")).toBe("delivered");
+  for (const status of ["customer_confirmed", "paid", "cancelled"]) {
     expect(viewForStatus(status)).toBe("all");
   }
 });
 
-test("only the three tabs are accepted from the URL", () => {
-  for (const view of ["review", "customer", "all"]) {
+test("only the listed tabs are accepted from the URL", () => {
+  for (const view of [
+    "review",
+    "customer",
+    "finding",
+    "driver",
+    "delivered",
+    "all",
+  ]) {
     expect(isQueueView(view)).toBe(true);
   }
   for (const value of ["", "ALL", "paid", undefined, ["all"]]) {

@@ -69,6 +69,7 @@ export default async function PortalLayout({
 
   // A dispatcher belongs in the admin console, not the customer portal.
   if (profile.role === "dispatcher") redirect("/admin");
+  if (profile.role === "driver") redirect("/driver");
 
   if (profile.role !== "customer") {
     return <NotAvailable role={profile.role} />;

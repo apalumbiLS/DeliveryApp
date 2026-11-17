@@ -70,9 +70,13 @@ export type OrderDetail = {
     discountCents: number;
     totalCents: number;
     deliverySize: string | null;
+    /** Null until saved; the job posts with the default when it is. */
+    driverPayoutCents: number | null;
     createdAt: string;
   };
   companyName: string;
+  /** The driver who accepted the job, once one has. */
+  driver: { name: string; phone: string | null } | null;
   items: QueueItemRow[];
   email: {
     id: string;
@@ -122,6 +126,8 @@ type OrderRow = {
   tax_cents: number;
   total_cents: number;
   delivery_size: string | null;
+  driver_payout_cents: number | null;
+  assigned_driver_id: string | null;
   delivery_address: unknown;
   delivery_instructions: string | null;
   site_id: string | null;
@@ -152,11 +158,26 @@ function addressLines(address: unknown): string | null {
 /** The statuses that mean "a dispatcher still has something to do". */
 const QUEUE_STATUSES = ["received", "needs_review"];
 
+/** From a driver accepting the job up to delivery. */
+const WITH_DRIVER_STATUSES = [
+  "driver_assigned",
+  "driver_at_store",
+  "items_purchased",
+  "en_route",
+];
+
 /**
- * The review page's list tabs: the queue itself, orders sent to the customer
- * for approval, and every order.
+ * The review page's list tabs, one per stage an order waits in, then every
+ * order.
  */
-export const QUEUE_VIEWS = ["review", "customer", "all"] as const;
+export const QUEUE_VIEWS = [
+  "review",
+  "customer",
+  "finding",
+  "driver",
+  "delivered",
+  "all",
+] as const;
 
 export type QueueView = (typeof QUEUE_VIEWS)[number];
 
@@ -164,8 +185,18 @@ export type QueueView = (typeof QUEUE_VIEWS)[number];
 const VIEW_STATUSES: Record<QueueView, string[] | null> = {
   review: QUEUE_STATUSES,
   customer: ["awaiting_customer"],
+  finding: ["driver_requested"],
+  driver: WITH_DRIVER_STATUSES,
+  delivered: ["delivered"],
   all: null,
 };
+
+/**
+ * The worklists run oldest first: the order that has waited longest is the one
+ * a customer is most likely chasing. "Delivered" and "All" are records, so
+ * newest first.
+ */
+const NEWEST_FIRST: readonly QueueView[] = ["delivered", "all"];
 
 /** How many orders one tab lists. */
 export const VIEW_LIMIT = 50;
@@ -176,9 +207,10 @@ export function isQueueView(value: unknown): value is QueueView {
 
 /** The tab an order belongs in, so the open order is in the list shown. */
 export function viewForStatus(status: string): QueueView {
-  if (QUEUE_STATUSES.includes(status)) return "review";
-  if (status === "awaiting_customer") return "customer";
-  return "all";
+  const view = QUEUE_VIEWS.find((option) =>
+    VIEW_STATUSES[option]?.includes(status),
+  );
+  return view ?? "all";
 }
 
 /** How many orders each tab holds — beyond the rows a tab lists. */
@@ -195,11 +227,9 @@ export async function countQueueViews(
     }),
   );
 
-  return {
-    review: counts[0].count ?? 0,
-    customer: counts[1].count ?? 0,
-    all: counts[2].count ?? 0,
-  };
+  return Object.fromEntries(
+    QUEUE_VIEWS.map((view, index) => [view, counts[index].count ?? 0]),
+  ) as Record<QueueView, number>;
 }
 
 export async function listQueue(
@@ -216,10 +246,7 @@ export async function listQueue(
   const { data: orderData } = await (
     statuses ? base.in("status", statuses) : base
   )
-    // The two worklists run oldest first: the order that has waited longest is
-    // the one a customer is most likely chasing. "All" is a record, so newest
-    // first.
-    .order("created_at", { ascending: view !== "all" })
+    .order("created_at", { ascending: !NEWEST_FIRST.includes(view) })
     .limit(VIEW_LIMIT);
 
   const orders = (orderData ?? []) as OrderRow[];
@@ -288,7 +315,7 @@ export async function loadOrderDetail(
   const { data: orderData } = await supabase
     .from("orders")
     .select(
-      "id, order_number, status, retailer, company_id, retailer_store_id, materials_subtotal_cents, sizing_fee_cents, mileage_fee_cents, discount_cents, tax_cents, total_cents, delivery_size, delivery_address, delivery_instructions, site_id, requester_email, created_at, inbound_email_id",
+      "id, order_number, status, retailer, company_id, retailer_store_id, materials_subtotal_cents, sizing_fee_cents, mileage_fee_cents, discount_cents, tax_cents, total_cents, delivery_size, driver_payout_cents, assigned_driver_id, delivery_address, delivery_instructions, site_id, requester_email, created_at, inbound_email_id",
     )
     .eq("id", orderId)
     .maybeSingle();
@@ -296,42 +323,55 @@ export async function loadOrderDetail(
   const order = orderData as OrderRow | null;
   if (!order) return null;
 
-  const [companyResult, itemsResult, emailResult, siteResult, inviteResult] =
-    await Promise.all([
-      supabase
-        .from("companies")
-        .select("name, billing_email")
-        .eq("id", order.company_id)
-        .maybeSingle(),
-      supabase
-        .from("order_items")
-        .select(
-          "id, line_no, description, model_number, store_sku, quantity, image_url, product_url",
-        )
-        .eq("order_id", order.id)
-        .order("line_no", { ascending: true }),
-      order.inbound_email_id
-        ? supabase
-            .from("inbound_emails")
-            .select("id, sender_email, subject, received_at, body_html")
-            .eq("id", order.inbound_email_id)
-            .maybeSingle()
-        : Promise.resolve({ data: null }),
-      order.site_id
-        ? supabase
-            .from("company_sites")
-            .select("label, lat, lng")
-            .eq("id", order.site_id)
-            .maybeSingle()
-        : Promise.resolve({ data: null }),
-      supabase
-        .from("notifications")
-        .select("id, status")
-        .eq("order_id", order.id)
-        .eq("template_key", "checkout_invite")
-        .limit(1)
-        .maybeSingle(),
-    ]);
+  const [
+    companyResult,
+    itemsResult,
+    emailResult,
+    siteResult,
+    inviteResult,
+    driverResult,
+  ] = await Promise.all([
+    supabase
+      .from("companies")
+      .select("name, billing_email")
+      .eq("id", order.company_id)
+      .maybeSingle(),
+    supabase
+      .from("order_items")
+      .select(
+        "id, line_no, description, model_number, store_sku, quantity, image_url, product_url",
+      )
+      .eq("order_id", order.id)
+      .order("line_no", { ascending: true }),
+    order.inbound_email_id
+      ? supabase
+          .from("inbound_emails")
+          .select("id, sender_email, subject, received_at, body_html")
+          .eq("id", order.inbound_email_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    order.site_id
+      ? supabase
+          .from("company_sites")
+          .select("label, lat, lng")
+          .eq("id", order.site_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    supabase
+      .from("notifications")
+      .select("id, status")
+      .eq("order_id", order.id)
+      .eq("template_key", "checkout_invite")
+      .limit(1)
+      .maybeSingle(),
+    order.assigned_driver_id
+      ? supabase
+          .from("profiles")
+          .select("full_name, phone")
+          .eq("id", order.assigned_driver_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
 
   const company = companyResult.data as {
     name: string;
@@ -442,9 +482,18 @@ export async function loadOrderDetail(
       discountCents: order.discount_cents,
       totalCents: order.total_cents,
       deliverySize: order.delivery_size,
+      driverPayoutCents: order.driver_payout_cents,
       createdAt: order.created_at,
     },
     companyName: company?.name ?? "Unknown company",
+    driver: driverResult.data
+      ? {
+          name:
+            (driverResult.data as { full_name: string | null }).full_name ??
+            "Unnamed driver",
+          phone: (driverResult.data as { phone: string | null }).phone,
+        }
+      : null,
     items,
     email: emailResult.data
       ? {
