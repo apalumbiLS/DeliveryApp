@@ -20,8 +20,16 @@ import {
   DeliveryEditPanel,
   DeliveryEditProvider,
   DeliveryEditToggle,
+  WhenDeliveryEditClosed,
 } from "@/components/console/delivery-edit";
-import { DraftForm, DraftSaveButton } from "@/components/console/draft-form";
+import {
+  DraftForm,
+  DraftMarker,
+  DraftSaveBar,
+  DraftStatus,
+  DraftsProvider,
+  SubmitWhenSaved,
+} from "@/components/console/draft-form";
 import { IntroDialog } from "@/components/console/intro-dialog";
 import { QUEUE_VIEW_EMPTY, QueueTabs } from "@/components/console/queue-tabs";
 import { InboundExceptionList } from "@/components/console/inbound-exception-list";
@@ -31,7 +39,6 @@ import {
 } from "@/components/console/size-picker";
 import { Td, Th } from "@/components/console/table";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { AlertIcon, CheckIcon, TagIcon } from "@/components/ui/icons";
 import {
   sendForApproval,
@@ -446,7 +453,12 @@ function DeliveryBand({
               <span className="text-[11.5px] font-medium text-ink-muted">
                 Deliver to
               </span>
-              <DeliveryEditToggle />
+              <div className="flex items-center gap-2">
+                <WhenDeliveryEditClosed>
+                  <DraftMarker form="delivery details" />
+                </WhenDeliveryEditClosed>
+                <DeliveryEditToggle />
+              </div>
             </div>
             <div
               className={cn(
@@ -482,6 +494,7 @@ function DeliveryBand({
           </div>
 
           <DraftForm
+            label="store"
             action={updateOrderStore}
             savedKey={detail.store?.id ?? "none"}
             messages={{
@@ -538,7 +551,7 @@ function DeliveryBand({
               ))}
             </select>
 
-            <DraftSaveButton label="Save store" className="mt-2" />
+            <DraftStatus className="mt-2" />
 
             {storeGate?.state === "warn" ? (
               <div className="mt-1.5 flex items-start gap-1.5 rounded-control bg-warning-bg px-2 py-1.5">
@@ -551,6 +564,7 @@ function DeliveryBand({
           </DraftForm>
 
           <DraftForm
+            label="size & price"
             action={updateOrderQuote}
             savedKey={[
               detail.order.deliverySize,
@@ -629,7 +643,7 @@ function DeliveryBand({
                 </span>
               </div>
 
-              <DraftSaveButton label="Save size & price" className="mt-2" />
+              <DraftStatus className="mt-2" />
 
               <p className="mt-1.5 text-[10.5px] leading-relaxed text-ink-faint">
                 Fees are entered by hand until the pricing model is settled.
@@ -640,6 +654,7 @@ function DeliveryBand({
 
         <DeliveryEditPanel>
           <DraftForm
+            label="delivery details"
             action={updateOrderDelivery}
             savedKey={JSON.stringify(fields)}
             messages={{
@@ -691,10 +706,7 @@ function DeliveryBand({
                 />
               </label>
             </div>
-            <DraftSaveButton
-              label="Save delivery details"
-              className="mt-2 w-fit"
-            />
+            <DraftStatus className="mt-2" />
           </DraftForm>
         </DeliveryEditPanel>
       </DeliveryEditProvider>
@@ -762,30 +774,33 @@ function GateBar({
           ) : null}
         </div>
 
-        {detail.inviteQueued ? (
-          // The order's status already says `awaiting_customer`, which implies a
-          // message went out. It did not. This says so rather than letting the
-          // state quietly overstate what happened.
-          <span className="shrink-0 rounded-control bg-warning-bg px-3 py-1.5 text-[11.5px] font-medium text-warning-ink">
-            Invite queued — not sent
-          </span>
-        ) : IN_REVIEW.includes(status) ? (
-          <form action={sendForApproval} className="shrink-0">
-            <input type="hidden" name="orderId" value={orderId} />
-            <Button type="submit" size="sm" disabled={Boolean(blocker)}>
-              Send for approval
-            </Button>
-          </form>
-        ) : status === "awaiting_customer" ? (
-          <span className="flex shrink-0 items-center gap-1.5 rounded-control bg-success-bg px-3 py-1.5 text-[11.5px] font-medium text-success-ink">
-            <CheckIcon className="h-3.5 w-3.5" />
-            Sent for approval
-          </span>
-        ) : (
-          <Badge tone="neutral" bordered>
-            {orderStatusLabel[status as OrderStatus] ?? status}
-          </Badge>
-        )}
+        <div className="flex shrink-0 items-center gap-3">
+          <DraftSaveBar />
+          {detail.inviteQueued ? (
+            // The order's status already says `awaiting_customer`, which implies a
+            // message went out. It did not. This says so rather than letting the
+            // state quietly overstate what happened.
+            <span className="shrink-0 rounded-control bg-warning-bg px-3 py-1.5 text-[11.5px] font-medium text-warning-ink">
+              Invite queued — not sent
+            </span>
+          ) : IN_REVIEW.includes(status) ? (
+            <form action={sendForApproval} className="shrink-0">
+              <input type="hidden" name="orderId" value={orderId} />
+              <SubmitWhenSaved disabled={Boolean(blocker)}>
+                Send for approval
+              </SubmitWhenSaved>
+            </form>
+          ) : status === "awaiting_customer" ? (
+            <span className="flex shrink-0 items-center gap-1.5 rounded-control bg-success-bg px-3 py-1.5 text-[11.5px] font-medium text-success-ink">
+              <CheckIcon className="h-3.5 w-3.5" />
+              Sent for approval
+            </span>
+          ) : (
+            <Badge tone="neutral" bordered>
+              {orderStatusLabel[status as OrderStatus] ?? status}
+            </Badge>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -825,12 +840,14 @@ export default async function ReviewOrderPage(
         selectedId={orderId}
       />
       <div className="flex min-w-0 flex-1 flex-col px-4 py-3.5">
-        {detail.order.retailer === "lowes" ? <LowesPricingSteps /> : null}
-        <div className="space-y-3">
-          <ItemsBand detail={detail} orderId={orderId} />
-          <DeliveryBand detail={detail} orderId={orderId} />
-        </div>
-        <GateBar detail={detail} orderId={orderId} />
+        <DraftsProvider>
+          {detail.order.retailer === "lowes" ? <LowesPricingSteps /> : null}
+          <div className="space-y-3">
+            <ItemsBand detail={detail} orderId={orderId} />
+            <DeliveryBand detail={detail} orderId={orderId} />
+          </div>
+          <GateBar detail={detail} orderId={orderId} />
+        </DraftsProvider>
       </div>
     </div>
   );

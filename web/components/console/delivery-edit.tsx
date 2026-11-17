@@ -2,9 +2,14 @@
 
 import { createContext, useContext, useState, type ReactNode } from "react";
 
+import { DraftRevealProvider } from "@/components/console/draft-form";
 import { Button } from "@/components/ui/button";
 
-type DeliveryEditState = { open: boolean; toggle: () => void };
+type DeliveryEditState = {
+  open: boolean;
+  toggle: () => void;
+  show: () => void;
+};
 
 const DeliveryEditContext = createContext<DeliveryEditState | null>(null);
 
@@ -33,7 +38,11 @@ export function DeliveryEditProvider({
   const [open, setOpen] = useState(defaultOpen);
   return (
     <DeliveryEditContext.Provider
-      value={{ open, toggle: () => setOpen((current) => !current) }}
+      value={{
+        open,
+        toggle: () => setOpen((current) => !current),
+        show: () => setOpen(true),
+      }}
     >
       {children}
     </DeliveryEditContext.Provider>
@@ -56,15 +65,21 @@ export function DeliveryEditToggle() {
   );
 }
 
+/** Renders only while the edit panel is closed. */
+export function WhenDeliveryEditClosed({ children }: { children: ReactNode }) {
+  const { open } = useDeliveryEdit();
+  return open ? null : children;
+}
+
 /**
  * Hidden rather than unmounted, so closing it does not discard edits that have
- * not been saved yet.
+ * not been saved yet. A rejected save opens it again.
  */
 export function DeliveryEditPanel({ children }: { children: ReactNode }) {
-  const { open } = useDeliveryEdit();
+  const { open, show } = useDeliveryEdit();
   return (
     <div id="delivery-edit" hidden={!open}>
-      {children}
+      <DraftRevealProvider reveal={show}>{children}</DraftRevealProvider>
     </div>
   );
 }
