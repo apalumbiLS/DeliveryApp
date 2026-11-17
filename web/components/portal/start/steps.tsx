@@ -520,7 +520,8 @@ export function FinishStep({
       {alias ? (
         <div className="mt-5">
           <p className="text-[14px] text-ink-muted">
-            You&apos;ll paste this as the recipient
+            When your cart is ready, email it from {retailer.label} to this
+            address
           </p>
           {/* Phones stack the full address over a full-width button. Wider
               screens keep the button beside the address, which may truncate:

@@ -261,7 +261,10 @@ export function FinishTutorial({
               <TapOrClick /> <EnvelopeIcon />
               <span className="hidden md:inline"> Share</span>
             </>,
-            <>Paste our address as the recipient, then Send</>,
+            <>
+              Paste the email address we&apos;ll give you after this guide as
+              the recipient, then Send
+            </>,
           ].map((line, i) => (
             <li
               key={i}
