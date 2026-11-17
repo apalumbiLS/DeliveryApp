@@ -49,6 +49,10 @@ import {
   updateOrderQuote,
   updateOrderStore,
 } from "@/lib/dispatch/actions";
+import {
+  loadDriverEvidence,
+  type DriverEvidence,
+} from "@/lib/dispatch/driver-evidence";
 import { blockingGate, type Gate } from "@/lib/dispatch/gates";
 import {
   defaultDriverPayoutCents,
@@ -67,6 +71,7 @@ import {
   type QueueView,
 } from "@/lib/dispatch/review-queue";
 import { requireDispatcher } from "@/lib/dispatch/require-dispatcher";
+import { JOB_STEPS } from "@/lib/driver/steps";
 import { formatDistance } from "@/lib/geo";
 import {
   orderStatusLabel,
@@ -796,6 +801,147 @@ function PayoutForm({
   );
 }
 
+const stamp = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+});
+
+const EVIDENCE_LABELS = {
+  receipt: "Receipt",
+  delivery: "Delivery photo",
+} as const;
+
+/**
+ * What the driver has done: each step's time, and the receipt and delivery
+ * photos or the reason one was skipped. Photos open full size in a new tab.
+ */
+function DriverBand({
+  detail,
+  evidence,
+}: {
+  detail: OrderDetail;
+  evidence: DriverEvidence;
+}) {
+  const steps = [
+    { status: "driver_assigned" as const, label: "Accepted" },
+    ...JOB_STEPS.map((step) => ({
+      status: step.to,
+      label: orderStatusLabel[step.to],
+    })),
+  ];
+  const posted = detail.order.status === "driver_requested";
+
+  return (
+    <Band
+      title="3 · Driver"
+      status={
+        detail.driver ? (
+          <span className="text-[11.5px] text-ink-muted">
+            {detail.driver.name}
+            {detail.driver.phone ? ` · ${detail.driver.phone}` : null}
+          </span>
+        ) : null
+      }
+    >
+      <div className="grid grid-cols-[minmax(0,13rem)_minmax(0,1fr)] gap-4">
+        <div>
+          {posted ? (
+            <p className="text-[11.5px] leading-relaxed text-ink-muted">
+              Waiting for a driver to accept.
+            </p>
+          ) : (
+            <ol>
+              {steps.map((step) => {
+                const at = evidence.reachedAt[step.status];
+                return (
+                  <li
+                    key={step.status}
+                    className="flex items-center gap-2 py-1"
+                  >
+                    <CheckDot state={at ? "pass" : "todo"} />
+                    <span
+                      className={cn(
+                        "flex-1 text-[12px]",
+                        at ? "text-ink" : "text-ink-faint",
+                      )}
+                    >
+                      {step.label}
+                    </span>
+                    {at ? (
+                      <span className="text-[11px] text-ink-faint tabular-nums">
+                        {stamp.format(new Date(at))}
+                      </span>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ol>
+          )}
+          {evidence.releasedAt ? (
+            <p className="mt-2 text-[10.5px] leading-relaxed text-ink-faint">
+              Released from a driver{" "}
+              {stamp.format(new Date(evidence.releasedAt))}. Photos from before
+              then are kept below.
+            </p>
+          ) : null}
+        </div>
+
+        <div>
+          {evidence.items.length === 0 ? (
+            <p className="text-[11.5px] leading-relaxed text-ink-faint">
+              No photos yet. The driver photographs the receipt after buying,
+              and the materials after delivering.
+            </p>
+          ) : (
+            <ul className="grid grid-cols-[repeat(auto-fill,minmax(10rem,1fr))] gap-3">
+              {evidence.items.map((item) => (
+                <li key={item.id} className="min-w-0">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="truncate text-[11.5px] font-medium text-ink">
+                      {EVIDENCE_LABELS[item.kind]}
+                    </span>
+                    <span className="shrink-0 text-[10.5px] text-ink-faint tabular-nums">
+                      {stamp.format(new Date(item.at))}
+                    </span>
+                  </div>
+                  {item.url ? (
+                    <a
+                      href={item.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-1.5 block overflow-hidden rounded-field border border-hairline bg-card-muted"
+                    >
+                      {/* Redirects to a freshly signed URL in private storage,
+                          which next/image cannot optimize. */}
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={item.url}
+                        alt={`${EVIDENCE_LABELS[item.kind]}, open full size`}
+                        className="h-36 w-full object-cover text-[11px] text-ink-muted"
+                      />
+                    </a>
+                  ) : (
+                    <div className="mt-1.5 rounded-field bg-warning-bg px-2.5 py-2">
+                      <div className="text-[11px] font-medium text-warning-ink">
+                        Skipped
+                      </div>
+                      <p className="mt-0.5 text-[11px] leading-relaxed break-words text-warning-ink">
+                        {item.skipReason}
+                      </p>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </Band>
+  );
+}
+
 function GateChip({ gate }: { gate: Gate }) {
   return (
     <span className="flex items-center gap-1.5">
@@ -818,6 +964,9 @@ const WITH_DRIVER = [
   "items_purchased",
   "en_route",
 ];
+
+/** Posted to drivers onward: where the driver band shows. */
+const DRIVER_STAGES = ["driver_requested", ...WITH_DRIVER, "delivered"];
 
 function driverLabel(driver: NonNullable<OrderDetail["driver"]>): string {
   return driver.phone ? `${driver.name} · ${driver.phone}` : driver.name;
@@ -939,12 +1088,15 @@ export default async function ReviewOrderPage(
     ? requested
     : viewForStatus(detail.order.status);
 
-  const [queue, counts, exceptions] = await Promise.all([
+  const [queue, counts, exceptions, evidence] = await Promise.all([
     listQueue(supabase, view),
     countQueueViews(supabase),
     view === "review"
       ? listInboundExceptions(supabase)
       : Promise.resolve([] as InboundException[]),
+    DRIVER_STAGES.includes(detail.order.status)
+      ? loadDriverEvidence(supabase, orderId)
+      : Promise.resolve(null),
   ]);
 
   return (
@@ -962,6 +1114,14 @@ export default async function ReviewOrderPage(
           <div className="space-y-3">
             <ItemsBand detail={detail} orderId={orderId} />
             <DeliveryBand detail={detail} orderId={orderId} />
+            {/* A fresh posting has nothing to show yet; one released from a
+                driver keeps that driver's photos. */}
+            {evidence &&
+            (detail.order.status !== "driver_requested" ||
+              evidence.items.length > 0 ||
+              evidence.releasedAt) ? (
+              <DriverBand detail={detail} evidence={evidence} />
+            ) : null}
           </div>
           <GateBar detail={detail} orderId={orderId} />
         </DraftsProvider>
