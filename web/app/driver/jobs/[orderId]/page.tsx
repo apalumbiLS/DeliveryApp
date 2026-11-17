@@ -17,7 +17,8 @@ import {
 } from "@/components/console/size-picker";
 import { JobStep } from "@/components/driver/job-step";
 import { Badge } from "@/components/ui/badge";
-import { Button, button } from "@/components/ui/button";
+import { button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { Card } from "@/components/ui/card";
 import {
   AlertIcon,
@@ -303,9 +304,13 @@ function PostingView({
         {canAccept ? (
           <form action={acceptJob} className="mt-5">
             <input type="hidden" name="orderId" value={posting.id} />
-            <Button type="submit" size="md" className="w-full">
+            <SubmitButton
+              size="md"
+              className="w-full"
+              pendingLabel="Accepting…"
+            >
               Accept job
-            </Button>
+            </SubmitButton>
           </form>
         ) : (
           <p className="mt-5 rounded-control bg-card-muted px-3 py-2 text-[13.5px] leading-relaxed text-ink-muted">

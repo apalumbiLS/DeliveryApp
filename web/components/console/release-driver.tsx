@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { releaseDriver } from "@/lib/dispatch/actions";
 
 /**
@@ -23,9 +23,9 @@ export function ReleaseDriver({ orderId }: { orderId: string }) {
       className="shrink-0"
     >
       <input type="hidden" name="orderId" value={orderId} />
-      <Button type="submit" intent="secondary" size="sm">
+      <SubmitButton intent="secondary" size="sm" pendingLabel="Releasing…">
         Release driver
-      </Button>
+      </SubmitButton>
     </form>
   );
 }

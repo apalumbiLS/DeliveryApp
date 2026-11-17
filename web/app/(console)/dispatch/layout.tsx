@@ -20,7 +20,10 @@ export default async function DispatchLayout(props: LayoutProps<"/dispatch">) {
             : `${waiting} waiting · every order is verified here before the invite goes out`
         }
       />
-      <div className="flex-1 overflow-y-auto">
+      {/* The window scrolls, not this box, so the review page's gate bar can
+          stick to the bottom of the screen. A scroll container here would
+          capture `sticky` without ever scrolling. Clipped sideways only. */}
+      <div className="flex-1 overflow-x-clip">
         {props.children as ReactNode}
       </div>
     </>

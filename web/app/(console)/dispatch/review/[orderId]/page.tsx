@@ -129,9 +129,9 @@ function QueueRail({
   exceptions: InboundException[];
   selectedId: string;
 }) {
-  // Only "All" is kept on the order links. The other two follow the order's
-  // own status, so an order that moves on — sent for approval, say — is still
-  // in the list it is shown with.
+  // Only "All" is kept on the order links. The others follow the order's own
+  // status, so an order that moves on — sent for approval, say — is still in
+  // the list it is shown with.
   const suffix = view === "all" ? "?view=all" : "";
 
   return (
@@ -139,7 +139,9 @@ function QueueRail({
       <QueueTabs
         view={view}
         counts={counts}
-        hrefFor={(option) => `/dispatch/review/${selectedId}?view=${option}`}
+        // A tab opens its own first order, or says it is empty, rather than
+        // keeping the current order open under a list it is not in.
+        hrefFor={(option) => `/dispatch/review?view=${option}`}
       />
       {queue.length === 0 ? (
         <p className="border-t border-hairline-soft px-4 py-3 text-[11.5px] text-ink-faint">
@@ -1041,7 +1043,10 @@ function GateBar({
           ) : IN_REVIEW.includes(status) ? (
             <form action={sendForApproval} className="shrink-0">
               <input type="hidden" name="orderId" value={orderId} />
-              <SubmitWhenSaved disabled={Boolean(blocker)}>
+              <SubmitWhenSaved
+                disabled={Boolean(blocker)}
+                pendingLabel="Sending…"
+              >
                 Send for approval
               </SubmitWhenSaved>
             </form>

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { InboundExceptionList } from "@/components/console/inbound-exception-list";
-import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/ui/submit-button";
 import {
   approveInboundEmail,
   dismissInboundEmail,
@@ -197,8 +197,8 @@ export default async function InboundReviewPage({
                 </select>
               </label>
             )}
-            <Button
-              type="submit"
+            <SubmitButton
+              pendingLabel="Creating order…"
               disabled={
                 !cart ||
                 intentMismatch ||
@@ -206,13 +206,13 @@ export default async function InboundReviewPage({
               }
             >
               Approve and create order
-            </Button>
+            </SubmitButton>
           </form>
           <form action={dismissInboundEmail}>
             <input type="hidden" name="inboundId" value={inboundId} />
-            <Button type="submit" intent="secondary">
+            <SubmitButton intent="secondary" pendingLabel="Dismissing…">
               Dismiss without an order
-            </Button>
+            </SubmitButton>
           </form>
         </div>
       </main>

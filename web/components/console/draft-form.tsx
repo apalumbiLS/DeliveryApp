@@ -14,6 +14,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { CheckIcon } from "@/components/ui/icons";
+import { useFormStatus } from "react-dom";
 import type { DraftResult } from "@/lib/dispatch/draft-input";
 import { cn } from "@/lib/utils";
 
@@ -419,24 +420,31 @@ export function DraftSaveBar() {
   );
 }
 
-/** A submit button that stays disabled while the page has unsaved edits. */
+/**
+ * A submit button that stays disabled while the page has unsaved edits, and
+ * while its own form is submitting, so it cannot be sent twice.
+ */
 export function SubmitWhenSaved({
   disabled,
+  pendingLabel,
   children,
 }: {
   disabled?: boolean;
+  /** Shown while the form submits. */
+  pendingLabel: ReactNode;
   children: ReactNode;
 }) {
   const { dirtyIds, saving } = useDrafts();
+  const { pending } = useFormStatus();
   const unsaved = dirtyIds.size > 0 || saving;
   return (
     <Button
       type="submit"
       size="sm"
-      disabled={disabled || unsaved}
+      disabled={disabled || unsaved || pending}
       title={unsaved ? "Save your changes first" : undefined}
     >
-      {children}
+      {pending ? pendingLabel : children}
     </Button>
   );
 }
