@@ -1,10 +1,75 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { ParsedCartSchema } from "@/lib/parsers";
+import type { ParsedCart } from "@/lib/parsers/types";
 
-import { parseInboundRecipient, resolveRecipient } from "./resolve-recipient";
+import {
+  parseInboundRecipient,
+  resolveRecipient,
+  type RecipientResolution,
+} from "./resolve-recipient";
 
 export type FinalizeResult = { orderId: string; orderNumber: string };
+
+/** The one-use intent this email claims, when its address is an open one. */
+function openIntentId(
+  recipient: RecipientResolution,
+  companyId: string,
+): string | null {
+  return recipient.kind === "intent" &&
+    recipient.companyId === companyId &&
+    recipient.intent.status === "open" &&
+    recipient.intent.retailer === "lowes"
+    ? recipient.intent.id
+    : null;
+}
+
+async function callFinalize(
+  admin: SupabaseClient,
+  args: {
+    inboundId: string;
+    companyId: string;
+    cart: ParsedCart;
+    reviewerId: string | null;
+    intentId: string | null;
+  },
+): Promise<FinalizeResult> {
+  const { data, error } = await admin.rpc("finalize_inbound_cart", {
+    p_inbound_email_id: args.inboundId,
+    p_company_id: args.companyId,
+    p_items: args.cart.items,
+    p_reviewer_id: args.reviewerId,
+    p_requester_email: args.cart.requesterEmail,
+    p_intent_id: args.intentId,
+  });
+  if (error || !Array.isArray(data) || !data[0]) {
+    throw new Error("Could not finalize inbound cart");
+  }
+  return {
+    orderId: (data[0] as { order_id: string }).order_id,
+    orderNumber: (data[0] as { order_number: string }).order_number,
+  };
+}
+
+/**
+ * A cart whose retailer signature verified, sent to a known company's address:
+ * the webhook turns it into an order itself, with no reviewer. The dispatcher
+ * still reviews the order before it goes to the customer.
+ */
+export function finalizeVerifiedEmail(
+  admin: SupabaseClient,
+  inboundId: string,
+  recipient: Exclude<RecipientResolution, { kind: "unattributed" }>,
+  cart: ParsedCart,
+): Promise<FinalizeResult> {
+  return callFinalize(admin, {
+    inboundId,
+    companyId: recipient.companyId,
+    cart,
+    reviewerId: null,
+    intentId: openIntentId(recipient, recipient.companyId),
+  });
+}
 
 export async function finalizeProvisionalEmail(
   dispatcher: SupabaseClient,
@@ -69,27 +134,11 @@ export async function finalizeProvisionalEmail(
   if (recipient.kind !== "unattributed" && recipient.companyId !== companyId) {
     throw new Error("Company does not match the recipient");
   }
-  const intentId =
-    recipient.kind === "intent" &&
-    recipient.companyId === companyId &&
-    recipient.intent.status === "open" &&
-    recipient.intent.retailer === "lowes"
-      ? recipient.intent.id
-      : null;
-
-  const { data, error } = await admin.rpc("finalize_inbound_cart", {
-    p_inbound_email_id: inboundId,
-    p_company_id: companyId,
-    p_items: parsed.data.items,
-    p_reviewer_id: reviewerId,
-    p_requester_email: parsed.data.requesterEmail,
-    p_intent_id: intentId,
+  return callFinalize(admin, {
+    inboundId,
+    companyId,
+    cart: parsed.data,
+    reviewerId,
+    intentId: openIntentId(recipient, companyId),
   });
-  if (error || !Array.isArray(data) || !data[0]) {
-    throw new Error("Could not finalize inbound cart");
-  }
-  return {
-    orderId: (data[0] as { order_id: string }).order_id,
-    orderNumber: (data[0] as { order_number: string }).order_number,
-  };
 }

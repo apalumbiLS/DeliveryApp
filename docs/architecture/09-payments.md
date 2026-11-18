@@ -3,6 +3,8 @@
 Collecting the delivery total with Stripe Payment Links.
 
 > **Status:** Planned design. Not yet implemented. See [04-order-lifecycle](04-order-lifecycle.md) for the `payment_requested → paid` transition.
+>
+> **Changed 2026-11-18:** the customer now pays when they approve the order, not after delivery. The design below predates that decision and will be revised when payments are built. See [backlog](../backlog.md#payments).
 
 ---
 

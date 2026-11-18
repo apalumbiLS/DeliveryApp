@@ -20,6 +20,7 @@ import {
   isParsedMailgunContentType,
   MAX_MAILGUN_BODY_BYTES,
   parseMailgunForm,
+  readBoundedForm,
 } from "@/lib/intake/mailgun-form";
 import { processInboundEmail } from "@/lib/intake/process-inbound-email";
 import { verifyMailgunSignature } from "@/lib/intake/verify-mailgun";
@@ -50,34 +51,16 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const declaredLength = Number(request.headers.get("content-length"));
-  if (declaredLength > MAX_MAILGUN_BODY_BYTES) {
-    return NextResponse.json({ error: "email too large" }, { status: 406 });
-  }
-
-  let form: FormData;
-  try {
-    if (!request.body) throw new Error("Missing body");
-    const reader = request.body.getReader();
-    const chunks: Buffer[] = [];
-    let size = 0;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      size += value.byteLength;
-      if (size > MAX_MAILGUN_BODY_BYTES) {
-        await reader.cancel();
-        return NextResponse.json({ error: "email too large" }, { status: 406 });
-      }
-      chunks.push(Buffer.from(value));
-    }
-    form = await new Request(request.url, {
-      method: "POST",
-      headers: { "content-type": contentType! },
-      body: Buffer.concat(chunks),
-    }).formData();
-  } catch {
-    return NextResponse.json({ error: "invalid form data" }, { status: 406 });
+  const form = await readBoundedForm(
+    request,
+    contentType!,
+    MAX_MAILGUN_BODY_BYTES,
+  );
+  if (!form) {
+    return NextResponse.json(
+      { error: "invalid or oversized form data" },
+      { status: 406 },
+    );
   }
 
   const parsed = parseMailgunForm(form);

@@ -23,6 +23,8 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.57.0",
+    "mailauth": "^8.0.6",
+    "mailparser": "^3.14.3",
     "motion": "^14.4.0",
     "next": "16.3.5",
     "react": "19.2.8",
@@ -34,6 +36,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/bun": "^1.4.2",
+    "@types/mailparser": "^3.9.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

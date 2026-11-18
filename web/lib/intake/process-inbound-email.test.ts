@@ -214,3 +214,90 @@ describe("signed Mailgun intake", () => {
     ]);
   });
 });
+
+describe("a verified retailer signature", () => {
+  type FinalizeCall = { name: string; args: Record<string, unknown> };
+
+  /** The fake has no RPCs; this records finalize calls and answers them. */
+  function withFinalize(db: FakeDatabase, fails = false) {
+    const calls: FinalizeCall[] = [];
+    const fake = fakeSupabase(db);
+    const client = {
+      from: (table: string) => fake.from(table),
+      rpc: async (name: string, args: Record<string, unknown>) => {
+        calls.push({ name, args });
+        return fails
+          ? { data: null, error: { message: "Invalid cart item" } }
+          : {
+              data: [{ order_id: "order-1", order_number: "#0042" }],
+              error: null,
+            };
+      },
+    } as unknown as SupabaseClient;
+    return { client, calls };
+  }
+
+  const verified = { verifiedDomains: ["e.lowes.com"] };
+
+  test("turns a cart for a known company into an order with no reviewer", async () => {
+    const db = withCompany();
+    const { client, calls } = withFinalize(db);
+    const result = await processInboundEmail(client, inbound(verified), domain);
+
+    expect(result.status).toBe("ordered");
+    expect(result.detail).toBe("#0042");
+    expect(calls).toHaveLength(1);
+    expect(calls[0].name).toBe("finalize_inbound_cart");
+    expect(calls[0].args.p_reviewer_id).toBeNull();
+    expect(calls[0].args.p_company_id).toBe("company-1");
+    expect(calls[0].args.p_items).toHaveLength(3);
+  });
+
+  test("claims the open intent its delivery+ address names", async () => {
+    const db = withCompany();
+    withIntent(db);
+    const { client, calls } = withFinalize(db);
+    await processInboundEmail(
+      client,
+      inbound({ ...verified, recipient: `delivery+${token}@${domain}` }),
+      domain,
+    );
+    expect(calls[0].args.p_intent_id).toBe("intent-1");
+  });
+
+  test("an unknown address still waits for a dispatcher", async () => {
+    const db = withCompany();
+    const { client, calls } = withFinalize(db);
+    const result = await processInboundEmail(
+      client,
+      inbound({ ...verified, recipient: `unknown@${domain}` }),
+      domain,
+    );
+    expect(result.status).toBe("unattributed");
+    expect(calls).toHaveLength(0);
+  });
+
+  test("a signature from another domain does not count", async () => {
+    const db = withCompany();
+    const { client, calls } = withFinalize(db);
+    const result = await processInboundEmail(
+      client,
+      inbound({ verifiedDomains: ["s4.y.mc.salesforce.com"] }),
+      domain,
+    );
+    expect(result.status).toBe("provisional");
+    expect(calls).toHaveLength(0);
+    expect(db.inbound_emails[0].review_reason).toContain("did not verify");
+  });
+
+  test("a failed finalize leaves the email for a dispatcher", async () => {
+    const db = withCompany();
+    const { client } = withFinalize(db, true);
+    const result = await processInboundEmail(client, inbound(verified), domain);
+    expect(result.status).toBe("provisional");
+    expect(db.inbound_emails[0].review_status).toBe("pending");
+    expect(db.inbound_emails[0].review_reason).toContain(
+      "could not be created",
+    );
+  });
+});

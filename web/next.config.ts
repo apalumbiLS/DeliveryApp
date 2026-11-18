@@ -8,6 +8,9 @@ const nextConfig: NextConfig = {
     ...(process.env.DEV_ALLOWED_ORIGINS?.split(",").map((o) => o.trim()) ?? []),
   ],
   logging: { serverFunctions: false },
+  // Loaded from node_modules at runtime rather than bundled: the inbound
+  // email libraries use Node's dns and stream modules.
+  serverExternalPackages: ["mailauth", "mailparser"],
   // Docker/WSL/VM file watching: uncomment if hot reload misses changes.
   // This is Turbopack's polling watcher — known-flaky, so off by default.
   // watchOptions: { pollIntervalMs: 1000 },

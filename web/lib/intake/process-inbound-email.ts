@@ -3,7 +3,13 @@
  *
  * Runs inline after the Mailgun transport signature is verified. Mailgun's
  * signature does not authenticate Lowe's, and a DKIM-Signature header can be
- * forged. No order, site claim, customer message or driver job is created here.
+ * forged, so by default every cart waits for a dispatcher.
+ *
+ * The one exception: the raw-MIME route verifies the retailer's DKIM signature
+ * for real and passes the verified domains in. A cart signed by its own
+ * retailer and sent to a known company's address becomes an order here; the
+ * dispatcher still reviews it before it goes to the customer. No customer
+ * message or driver job is created here either way.
  *
  * The raw email is stored first so a parser fix can be replayed. Only a
  * dispatcher can turn a validated preview into an order through the atomic
@@ -20,6 +26,7 @@ import {
   firstHeader,
   parseMessageHeaders,
 } from "./authenticity";
+import { finalizeVerifiedEmail } from "./finalize-provisional";
 import {
   inboundDedupeKey,
   parseInboundRecipient,
@@ -34,6 +41,12 @@ export type InboundEmailInput = {
   bodyPlain: string | null;
   strippedHtml: string | null;
   messageHeadersRaw: string | null;
+  /**
+   * Domains whose DKIM signature cryptographically verified and aligned with
+   * the From address. Only the raw-MIME route can know this; undefined means
+   * nothing was verified.
+   */
+  verifiedDomains?: string[];
 };
 
 export type IntakeStatus =
@@ -41,7 +54,8 @@ export type IntakeStatus =
   | "unattributed"
   | "unsupported_retailer"
   | "provisional"
-  | "needs_review";
+  | "needs_review"
+  | "ordered";
 
 export type IntakeResult = {
   status: IntakeStatus;
@@ -187,13 +201,59 @@ export async function processInboundEmail(
     };
   }
 
+  const verified = (input.verifiedDomains ?? []).some((signedDomain) =>
+    isDomainOrSubdomainOf(signedDomain, parser.senderParentDomain),
+  );
+
+  // Order creation is Lowe's-only until finalization handles Home Depot.
+  if (
+    verified &&
+    resolution.kind !== "unattributed" &&
+    outcome.retailer === "lowes"
+  ) {
+    // Finalization requires a pending review, so record one first. If it then
+    // fails, the email stays in that review rather than being retried.
+    await recordReview(
+      supabase,
+      inboundEmailId,
+      "Retailer signature verified; creating the order",
+      companyId,
+    );
+    try {
+      const order = await finalizeVerifiedEmail(
+        supabase,
+        inboundEmailId,
+        resolution,
+        outcome.cart,
+      );
+      return {
+        status: "ordered",
+        inboundId: inboundEmailId,
+        detail: order.orderNumber,
+      };
+    } catch {
+      const reason =
+        "Retailer signature verified, but the order could not be created; dispatcher approval required";
+      await recordReview(supabase, inboundEmailId, reason, companyId);
+      return {
+        status: "provisional",
+        inboundId: inboundEmailId,
+        detail: reason,
+      };
+    }
+  }
+
   const signedDomains = dkimSignedDomains(headers);
   const hasMatchingDkimHeader = signedDomains.some((signedDomain) =>
     isDomainOrSubdomainOf(signedDomain, parser.senderParentDomain),
   );
-  const retailerReason = hasMatchingDkimHeader
-    ? "Retailer signature is present but not verified; dispatcher approval required"
-    : "Retailer identity unverified; dispatcher approval required";
+  const retailerReason = verified
+    ? "Retailer signature verified; dispatcher approval required"
+    : input.verifiedDomains
+      ? "Retailer signature did not verify; dispatcher approval required"
+      : hasMatchingDkimHeader
+        ? "Retailer signature is present but not verified; dispatcher approval required"
+        : "Retailer identity unverified; dispatcher approval required";
   const reason =
     resolution.kind === "unattributed"
       ? `${resolution.reason}; ${retailerReason}`
