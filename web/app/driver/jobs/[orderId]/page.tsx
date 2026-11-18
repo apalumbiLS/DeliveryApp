@@ -415,7 +415,8 @@ function JobView({ job, canAct }: { job: DriverJob; canAct: boolean }) {
       <SectionCard title={itemsTitle("Buy exactly this", job.items)}>
         <ItemList items={job.items} />
         <p className="mt-2 text-[13px] leading-relaxed text-ink-faint">
-          Out of stock? Call dispatch before you substitute anything.
+          Out of stock? Call the on-site contact before you substitute anything.
+          Can&apos;t reach them? Call dispatch.
         </p>
       </SectionCard>
 
