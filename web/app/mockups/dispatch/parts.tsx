@@ -33,7 +33,7 @@ export {
 } from "@/components/console/check-row";
 export { Th, Td } from "@/components/console/table";
 
-/** The demo data says "Pickup"; the real enum says `pickup`. */
+/** The demo data says "Truck"; the real enum says `truck`. */
 export function SizePicker({
   selected,
   hint,

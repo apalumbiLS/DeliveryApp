@@ -141,7 +141,7 @@ function QueueColumn() {
           <CleanRow
             key={order.number}
             order={order}
-            price={CLEAN_QUOTES[order.number] ?? { size: "Pickup", total: "—" }}
+            price={CLEAN_QUOTES[order.number] ?? { size: "Truck", total: "—" }}
           />
         ))}
       </ul>

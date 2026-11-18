@@ -9,6 +9,7 @@ import {
   useState,
   useTransition,
   type FormEvent,
+  type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
 
@@ -40,6 +41,10 @@ type DraftsState = {
   register: (id: string, draft: Draft) => () => void;
   setDirty: (id: string, dirty: boolean) => void;
   saveAll: () => void;
+  /** Turns on the highlight for fields that still block sending. */
+  showMissing: () => void;
+  /** Opens and scrolls to a form by label; false when there is none. */
+  reveal: (id: string) => boolean;
 };
 
 const DraftsContext = createContext<DraftsState | null>(null);
@@ -116,6 +121,7 @@ export function DraftsProvider({ children }: { children: ReactNode }) {
   const [failed, setFailed] = useState<string[]>([]);
   const [saved, setSaved] = useState(false);
   const [saving, startSaving] = useTransition();
+  const [missingShown, setMissingShown] = useState(false);
 
   const setDirty = useCallback((id: string, dirty: boolean) => {
     if (dirty) setSaved(false);
@@ -167,9 +173,19 @@ export function DraftsProvider({ children }: { children: ReactNode }) {
         register,
         setDirty,
         saveAll,
+        showMissing: () => setMissingShown(true),
+        reveal: (id) => {
+          const draft = drafts.current.get(id);
+          draft?.reveal();
+          return Boolean(draft);
+        },
       }}
     >
-      {children}
+      {/* Fields style themselves with `in-data-show-missing:` while empty, so
+          a highlight clears as soon as the field is filled in. */}
+      <div className="contents" data-show-missing={missingShown || undefined}>
+        {children}
+      </div>
     </DraftsContext.Provider>
   );
 }
@@ -423,26 +439,54 @@ export function DraftSaveBar() {
 /**
  * A submit button that stays disabled while the page has unsaved edits, and
  * while its own form is submitting, so it cannot be sent twice.
+ *
+ * While something else blocks it, it stays clickable: a click scrolls to the
+ * first unfinished section and highlights what is missing, instead of sending.
  */
 export function SubmitWhenSaved({
-  disabled,
+  blockedTarget,
   pendingLabel,
   children,
 }: {
-  disabled?: boolean;
+  /**
+   * Set while the form cannot be sent: a draft form's label, or else the
+   * `data-gate` of a section, to scroll to.
+   */
+  blockedTarget?: string | null;
   /** Shown while the form submits. */
   pendingLabel: ReactNode;
   children: ReactNode;
 }) {
-  const { dirtyIds, saving } = useDrafts();
+  const { dirtyIds, saving, showMissing, reveal } = useDrafts();
   const { pending } = useFormStatus();
   const unsaved = dirtyIds.size > 0 || saving;
+
+  function onClick(event: ReactMouseEvent<HTMLButtonElement>) {
+    if (!blockedTarget) return;
+    event.preventDefault();
+    showMissing();
+    if (!reveal(blockedTarget)) {
+      // Centered, to clear the sticky gate bar.
+      document
+        .querySelector(`[data-gate="${blockedTarget}"]`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }
+
   return (
     <Button
       type="submit"
       size="sm"
-      disabled={disabled || unsaved || pending}
-      title={unsaved ? "Save your changes first" : undefined}
+      onClick={onClick}
+      disabled={unsaved || pending}
+      aria-disabled={blockedTarget ? true : undefined}
+      title={
+        unsaved
+          ? "Save your changes first"
+          : blockedTarget
+            ? "Fill in what's highlighted first"
+            : undefined
+      }
     >
       {pending ? pendingLabel : children}
     </Button>

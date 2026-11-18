@@ -282,15 +282,15 @@ function PostingView({
               The on-site contact and drop-off notes show once you accept.
             </dd>
           </div>
+          {size ? (
+            <div>
+              <dt className="text-[12px] font-semibold tracking-widest text-ink-faint uppercase">
+                Vehicle needed
+              </dt>
+              <dd className="mt-1 text-[15px] font-medium text-ink">{size}</dd>
+            </div>
+          ) : null}
         </dl>
-
-        {size ? (
-          <div className="mt-4">
-            <Badge tone="accent" bordered>
-              {size}
-            </Badge>
-          </div>
-        ) : null}
 
         <div className="mt-4 border-t border-hairline-soft pt-4">
           <h2 className="text-[12px] font-semibold tracking-widest text-ink-faint uppercase">

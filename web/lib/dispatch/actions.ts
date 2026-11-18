@@ -176,6 +176,41 @@ export async function sendForApproval(formData: FormData): Promise<void> {
 }
 
 /**
+ * Undo a send for approval sent by mistake: the order goes back to review.
+ * Only while the customer has not approved — conditional on the status, so a
+ * customer approving at the same moment wins or loses cleanly.
+ */
+export async function undoSendForApproval(formData: FormData): Promise<void> {
+  const { supabase, userId } = await requireDispatcher();
+  const orderId = orderIdFrom(formData);
+  if (!orderId) return;
+
+  const { data: moved } = await supabase
+    .from("orders")
+    .update({ status: "needs_review" })
+    .eq("id", orderId)
+    .eq("status", "awaiting_customer")
+    .select("id")
+    .maybeSingle();
+
+  if (moved) {
+    await supabase.from("order_status_events").insert({
+      order_id: orderId,
+      from_status: "awaiting_customer",
+      to_status: "needs_review",
+      actor_profile_id: userId,
+      actor_role: "dispatcher",
+      source: "console",
+      note: "send for approval undone",
+    });
+  }
+
+  revalidatePath(`/dispatch/review/${orderId}`);
+  revalidatePath("/dispatch/review");
+  redirect(`/dispatch/review/${orderId}`);
+}
+
+/**
  * Take a job back from its driver and post it to drivers again, at the same
  * link. Allowed at any step before delivery; `release_driver` checks that.
  */

@@ -35,7 +35,8 @@ function text(form: FormData, key: string): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function cents(raw: string): number | null {
+/** A typed dollar amount in cents, or null when it is not one. */
+export function cents(raw: string): number | null {
   const value = raw.replace(/[$,]/g, "");
   if (!/^\d+(?:\.\d{1,2})?$/.test(value)) return null;
   const [whole, fraction = ""] = value.split(".");

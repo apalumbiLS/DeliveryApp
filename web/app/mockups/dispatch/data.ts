@@ -43,16 +43,13 @@ export const STORES = {
   lowes: stores("lowes"),
 };
 
-/** The three sizes a dispatcher can price — the delivery vehicle class. */
-export const SIZES = ["Car", "Pickup", "Truck"] as const;
+/** The two sizes a dispatcher can price — the delivery vehicle class. */
+export const SIZES = ["Car", "Truck"] as const;
 export type Size = (typeof SIZES)[number];
 
 /** The rate card a future fee rule engine would encode (see 12-deferred). */
 export const FEE_POLICY = {
-  sizing: { Car: "$15.00", Pickup: "$25.00", Truck: "$45.00" } as Record<
-    Size,
-    string
-  >,
+  sizing: { Car: "$15.00", Truck: "$45.00" } as Record<Size, string>,
   mileage: { freeMiles: 3, rate: "$2.50" },
 };
 
@@ -216,7 +213,7 @@ export const QUOTE = {
   company: "Acme Construction",
   retailer: "Home Depot",
   store: STORES.homedepot[0],
-  size: "Pickup" as Size,
+  size: "Truck" as Size,
   fit: "3 lines · longest 8 ft — a car won't take it",
   lines: [
     { name: "7/16 in. OSB sheathing", qty: "8", total: "$95.92" },
@@ -224,10 +221,10 @@ export const QUOTE = {
     { name: "16d framing nails, 1 lb", qty: "1", total: "$7.76" },
   ],
   materials: "$142.18",
-  sizing: "$25.00",
+  sizing: "$45.00",
   mileage: "$0.00",
   mileageNote: "2.4 mi — inside the 3 mi free band",
-  total: "$167.18",
+  total: "$187.18",
   confidence: "0.94",
   template: "Home Depot cart email · matched the last 38 carts",
   lastMismatch:
@@ -236,8 +233,8 @@ export const QUOTE = {
 
 /** The one-pass lane: a clean order's quote, ready to send. */
 export const CLEAN_QUOTES: Record<string, { size: Size; total: string }> = {
-  "#1044": { size: "Pickup", total: "$167.18" },
-  "#1053": { size: "Pickup", total: "$89.20" },
+  "#1044": { size: "Truck", total: "$187.18" },
+  "#1053": { size: "Truck", total: "$89.20" },
 };
 
 /** #1052 — the exception: the customer's store is nowhere near the site. */

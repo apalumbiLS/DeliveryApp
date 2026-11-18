@@ -465,6 +465,8 @@ export async function loadOrderDetail(
     hasSiteContact: Boolean(fields.contactName && fields.contactPhone),
     deliverySize: order.delivery_size,
     materialsCents: order.materials_subtotal_cents,
+    sizingCents: order.sizing_fee_cents,
+    mileageCents: order.mileage_fee_cents,
     totalCents: order.total_cents,
   });
 

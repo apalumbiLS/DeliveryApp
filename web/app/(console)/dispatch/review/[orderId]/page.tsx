@@ -32,7 +32,9 @@ import {
 } from "@/components/console/draft-form";
 import { IntroDialog } from "@/components/console/intro-dialog";
 import { JobLink } from "@/components/console/job-link";
+import { LiveTotal } from "@/components/console/live-total";
 import { ReleaseDriver } from "@/components/console/release-driver";
+import { UndoSend } from "@/components/console/undo-send";
 import { QUEUE_VIEW_EMPTY, QueueTabs } from "@/components/console/queue-tabs";
 import { InboundExceptionList } from "@/components/console/inbound-exception-list";
 import {
@@ -53,7 +55,7 @@ import {
   loadDriverEvidence,
   type DriverEvidence,
 } from "@/lib/dispatch/driver-evidence";
-import { blockingGate, type Gate } from "@/lib/dispatch/gates";
+import { blockingGate, MIN_FEE_CENTS, type Gate } from "@/lib/dispatch/gates";
 import {
   defaultDriverPayoutCents,
   isPayoutLocked,
@@ -550,7 +552,8 @@ function DeliveryBand({
               id="storeId"
               name="storeId"
               defaultValue={detail.store?.id ?? ""}
-              className="mt-1 w-full rounded-control border border-hairline bg-card px-2 py-1.5 text-[11.5px] text-ink"
+              required
+              className="mt-1 w-full rounded-control border border-hairline bg-card px-2 py-1.5 text-[11.5px] text-ink in-data-show-missing:invalid:border-warning in-data-show-missing:invalid:bg-warning-bg"
             >
               <option value="" disabled>
                 Choose a store
@@ -593,22 +596,24 @@ function DeliveryBand({
               }}
             >
               <input type="hidden" name="orderId" value={orderId} />
-              <span className="text-[11.5px] font-medium text-ink-muted">
-                Delivery size
-              </span>
+              <div className="group">
+                <span className="text-[11.5px] font-medium text-ink-muted in-data-show-missing:group-not-has-checked:text-warning-ink">
+                  Delivery size
+                </span>
 
-              <div className="mt-1.5">
-                <SizePicker
-                  name="deliverySize"
-                  selected={
-                    (detail.order.deliverySize as DeliverySize | null) ?? null
-                  }
-                />
+                <div className="mt-1.5 rounded-control in-data-show-missing:not-has-checked:ring-2 in-data-show-missing:not-has-checked:ring-warning">
+                  <SizePicker
+                    name="deliverySize"
+                    selected={
+                      (detail.order.deliverySize as DeliverySize | null) ?? null
+                    }
+                  />
+                </div>
               </div>
 
               <div className="mt-2.5 border-t border-hairline-soft pt-1.5">
-                <div className="flex items-center justify-between gap-2 py-1">
-                  <span className="text-[11.5px] text-ink-muted">
+                <div className="group flex items-center justify-between gap-2 py-1">
+                  <span className="text-[11.5px] text-ink-muted in-data-show-missing:group-has-placeholder-shown:text-warning-ink">
                     Materials
                     <span className="ml-1.5 text-[10.5px] text-ink-faint">
                       from Lowe&apos;s checkout
@@ -623,31 +628,49 @@ function DeliveryBand({
                         : ""
                     }
                     placeholder="Not priced"
-                    className="w-20 rounded-control border border-hairline bg-card px-2 py-1 text-right text-[12px] tabular-nums"
+                    className="w-20 rounded-control border border-hairline bg-card px-2 py-1 text-right text-[12px] tabular-nums in-data-show-missing:placeholder-shown:border-warning in-data-show-missing:placeholder-shown:bg-warning-bg"
                   />
                 </div>
 
-                <div className="flex items-center justify-between gap-2 py-1">
-                  <span className="text-[11.5px] text-ink-muted">
+                <div className="group flex items-center justify-between gap-2 py-1">
+                  <span className="text-[11.5px] text-ink-muted in-data-show-missing:group-has-placeholder-shown:text-warning-ink">
                     Sizing fee
                   </span>
                   <input
                     name="sizing"
                     inputMode="decimal"
-                    defaultValue={dollars(detail.order.sizingCents)}
-                    className="w-20 rounded-control border border-hairline bg-card px-2 py-1 text-right text-[12px] tabular-nums"
+                    defaultValue={
+                      detail.order.sizingCents
+                        ? dollars(detail.order.sizingCents)
+                        : ""
+                    }
+                    placeholder="Not set"
+                    className={cn(
+                      "w-20 rounded-control border border-hairline bg-card px-2 py-1 text-right text-[12px] tabular-nums in-data-show-missing:placeholder-shown:border-warning in-data-show-missing:placeholder-shown:bg-warning-bg",
+                      underMinimum(detail.order.sizingCents) &&
+                        "in-data-show-missing:border-warning in-data-show-missing:bg-warning-bg",
+                    )}
                   />
                 </div>
 
-                <div className="flex items-center justify-between gap-2 py-1">
-                  <span className="text-[11.5px] text-ink-muted">
+                <div className="group flex items-center justify-between gap-2 py-1">
+                  <span className="text-[11.5px] text-ink-muted in-data-show-missing:group-has-placeholder-shown:text-warning-ink">
                     Mileage fee
                   </span>
                   <input
                     name="mileage"
                     inputMode="decimal"
-                    defaultValue={dollars(detail.order.mileageCents)}
-                    className="w-20 rounded-control border border-hairline bg-card px-2 py-1 text-right text-[12px] tabular-nums"
+                    defaultValue={
+                      detail.order.mileageCents
+                        ? dollars(detail.order.mileageCents)
+                        : ""
+                    }
+                    placeholder="Not set"
+                    className={cn(
+                      "w-20 rounded-control border border-hairline bg-card px-2 py-1 text-right text-[12px] tabular-nums in-data-show-missing:placeholder-shown:border-warning in-data-show-missing:placeholder-shown:bg-warning-bg",
+                      underMinimum(detail.order.mileageCents) &&
+                        "in-data-show-missing:border-warning in-data-show-missing:bg-warning-bg",
+                    )}
                   />
                 </div>
 
@@ -655,15 +678,19 @@ function DeliveryBand({
                   <span className="text-[12px] font-semibold text-ink">
                     Total
                   </span>
-                  <span className="text-[14px] font-semibold text-ink tabular-nums">
-                    {money.format(detail.order.totalCents / 100)}
-                  </span>
+                  <LiveTotal
+                    savedCents={detail.order.totalCents}
+                    adjustmentCents={
+                      detail.order.taxCents - detail.order.discountCents
+                    }
+                  />
                 </div>
 
                 <DraftStatus className="mt-2" />
 
                 <p className="mt-1.5 text-[10.5px] leading-relaxed text-ink-faint">
                   Fees are entered by hand until the pricing model is settled.
+                  Each is at least ${dollars(MIN_FEE_CENTS)}.
                 </p>
               </div>
             </DraftForm>
@@ -944,17 +971,46 @@ function DriverBand({
   );
 }
 
+/** A blocking check turns amber once a blocked Send has been clicked. */
 function GateChip({ gate }: { gate: Gate }) {
+  const blocking = gate.state === "todo" || gate.state === "fail";
   return (
     <span className="flex items-center gap-1.5">
       <CheckDot state={gate.state} />
-      <span className="text-[11.5px] font-medium text-ink">{gate.label}</span>
+      <span
+        className={cn(
+          "text-[11.5px] font-medium text-ink",
+          blocking && "in-data-show-missing:text-warning-ink",
+        )}
+      >
+        {gate.label}
+      </span>
       {gate.detail ? (
-        <span className="text-[11px] text-ink-faint">{gate.detail}</span>
+        <span
+          className={cn(
+            "text-[11px] text-ink-faint",
+            blocking && "in-data-show-missing:text-warning-ink",
+          )}
+        >
+          {gate.detail}
+        </span>
       ) : null}
     </span>
   );
 }
+
+/** A fee entered but below the floor; an empty one shows as missing instead. */
+function underMinimum(cents: number): boolean {
+  return cents > 0 && cents < MIN_FEE_CENTS;
+}
+
+/** Where a click on a blocked Send goes: a draft form's label, or a section. */
+const GATE_TARGETS: Record<Gate["key"], string> = {
+  items: "items",
+  store: "store",
+  address: "delivery details",
+  price: "size & price",
+};
 
 /** The review queue's statuses. Past them, the order has been sent on. */
 const IN_REVIEW = ["received", "needs_review"];
@@ -998,7 +1054,7 @@ function gateNote(detail: OrderDetail, blocker: Gate | null): string | null {
   if (!IN_REVIEW.includes(detail.order.status)) return null;
 
   if (blocker) {
-    return `Unlocks when ${blocker.label.toLowerCase()} is resolved.`;
+    return "Not ready to send yet.";
   }
 
   return "Ready to send — the customer never sees a price we haven't checked.";
@@ -1044,17 +1100,20 @@ function GateBar({
             <form action={sendForApproval} className="shrink-0">
               <input type="hidden" name="orderId" value={orderId} />
               <SubmitWhenSaved
-                disabled={Boolean(blocker)}
+                blockedTarget={blocker ? GATE_TARGETS[blocker.key] : null}
                 pendingLabel="Sending…"
               >
                 Send for approval
               </SubmitWhenSaved>
             </form>
           ) : status === "awaiting_customer" ? (
-            <span className="flex shrink-0 items-center gap-1.5 rounded-control bg-success-bg px-3 py-1.5 text-[11.5px] font-medium text-success-ink">
-              <CheckIcon className="h-3.5 w-3.5" />
-              Sent for approval
-            </span>
+            <>
+              <UndoSend orderId={orderId} />
+              <span className="flex shrink-0 items-center gap-1.5 rounded-control bg-success-bg px-3 py-1.5 text-[11.5px] font-medium text-success-ink">
+                <CheckIcon className="h-3.5 w-3.5" />
+                Sent for approval
+              </span>
+            </>
           ) : (
             <>
               {status === "driver_requested" ? (
@@ -1117,7 +1176,18 @@ export default async function ReviewOrderPage(
         <DraftsProvider>
           {detail.order.retailer === "lowes" ? <LowesPricingSteps /> : null}
           <div className="space-y-3">
-            <ItemsBand detail={detail} orderId={orderId} />
+            <div
+              data-gate="items"
+              className={cn(
+                "rounded-card",
+                detail.gates.some(
+                  (gate) => gate.key === "items" && gate.state === "fail",
+                ) &&
+                  "in-data-show-missing:ring-2 in-data-show-missing:ring-warning",
+              )}
+            >
+              <ItemsBand detail={detail} orderId={orderId} />
+            </div>
             <DeliveryBand detail={detail} orderId={orderId} />
             {/* A fresh posting has nothing to show yet; one released from a
                 driver keeps that driver's photos. */}

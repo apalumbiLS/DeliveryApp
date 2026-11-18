@@ -106,7 +106,7 @@ describe("dispatcher draft inputs", () => {
     expect(
       parseQuoteDraft(
         form({
-          deliverySize: "pickup",
+          deliverySize: "truck",
           materials: "$1,234.56",
           sizing: "5",
           mileage: "",
@@ -115,7 +115,7 @@ describe("dispatcher draft inputs", () => {
     ).toEqual({
       ok: true,
       value: {
-        deliverySize: "pickup",
+        deliverySize: "truck",
         materialsCents: 123456,
         sizingCents: 500,
         mileageCents: 0,
@@ -123,7 +123,7 @@ describe("dispatcher draft inputs", () => {
     });
     for (const amount of ["1.999", "-1", "1000000", "unknown"]) {
       expect(
-        parseQuoteDraft(form({ deliverySize: "pickup", materials: amount })).ok,
+        parseQuoteDraft(form({ deliverySize: "truck", materials: amount })).ok,
       ).toBe(false);
     }
     expect(

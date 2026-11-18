@@ -11,8 +11,10 @@ function input(overrides: Partial<GateInput> = {}): GateInput {
     nearestMiles: 1.8,
     hasDeliveryAddress: true,
     hasSiteContact: true,
-    deliverySize: "pickup",
+    deliverySize: "truck",
     materialsCents: 15_974,
+    sizingCents: 2_000,
+    mileageCents: 500,
     totalCents: 18_474,
     ...overrides,
   };
@@ -95,17 +97,47 @@ describe("computeGates", () => {
     // Lowe's prints no prices, so this is the common case rather than an edge.
     const gates = computeGates(input({ materialsCents: 0, totalCents: 0 }));
 
-    expect(gates.find((gate) => gate.key === "price")?.detail).toContain(
-      "materials cost",
+    expect(gates.find((gate) => gate.key === "price")?.detail).toBe(
+      "materials missing",
     );
   });
 
   test("fees cannot make missing materials look priced", () => {
     const gates = computeGates(input({ materialsCents: 0, totalCents: 2500 }));
     expect(stateOf(gates, "price")).toBe("todo");
-    expect(gates.find((gate) => gate.key === "price")?.detail).toContain(
-      "materials cost",
+    expect(gates.find((gate) => gate.key === "price")?.detail).toBe(
+      "materials missing",
     );
+  });
+
+  test("counts the missing price fields when there are several", () => {
+    const gates = computeGates(
+      input({ deliverySize: null, materialsCents: 0, totalCents: 0 }),
+    );
+    expect(gates.find((gate) => gate.key === "price")?.detail).toBe(
+      "2 to fill in",
+    );
+  });
+
+  test("blocks a fee that was left blank", () => {
+    const gates = computeGates(input({ sizingCents: 0 }));
+    expect(stateOf(gates, "price")).toBe("todo");
+    expect(gates.find((gate) => gate.key === "price")?.detail).toBe(
+      "sizing fee missing",
+    );
+  });
+
+  test("blocks a fee under the minimum", () => {
+    const gates = computeGates(input({ mileageCents: 49 }));
+    expect(stateOf(gates, "price")).toBe("todo");
+    expect(gates.find((gate) => gate.key === "price")?.detail).toBe(
+      "mileage fee under $0.50",
+    );
+  });
+
+  test("accepts fees at the minimum", () => {
+    const gates = computeGates(input({ sizingCents: 50, mileageCents: 50 }));
+    expect(stateOf(gates, "price")).toBe("pass");
   });
 
   test("a positive total cannot make a missing size look ready", () => {

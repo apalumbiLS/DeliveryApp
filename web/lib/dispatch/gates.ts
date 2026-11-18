@@ -36,6 +36,8 @@ export type GateInput = {
   hasSiteContact: boolean;
   deliverySize: string | null;
   materialsCents: number;
+  sizingCents: number;
+  mileageCents: number;
   /** Materials + sizing + mileage + tax − discount. */
   totalCents: number;
 };
@@ -48,8 +50,38 @@ export type GateInput = {
  */
 export const STORE_DISTANCE_WARNING_MILES = 2;
 
+/**
+ * The least either delivery fee can be. Fees start blank, and a floor above
+ * zero means one left out by accident blocks the send, while a deal can still
+ * bring a fee down to almost nothing.
+ */
+export const MIN_FEE_CENTS = 50;
+
 function miles(value: number | null): string {
   return value === null ? "" : `${value.toFixed(1)} mi`;
+}
+
+/**
+ * What the price still needs, short enough for the gate bar: the field when
+ * one is missing, a count when several are. The form highlights which.
+ */
+function missingPrice(input: GateInput): string | null {
+  const fee = (cents: number, name: string) =>
+    cents >= MIN_FEE_CENTS
+      ? null
+      : cents > 0
+        ? `${name} under $${(MIN_FEE_CENTS / 100).toFixed(2)}`
+        : `${name} missing`;
+  const missing = [
+    input.deliverySize ? null : "pick a size",
+    input.materialsCents > 0 ? null : "materials missing",
+    fee(input.sizingCents, "sizing fee"),
+    fee(input.mileageCents, "mileage fee"),
+  ].filter((part): part is string => part !== null);
+  if (missing.length === 0) {
+    return input.totalCents > 0 ? null : "total is $0";
+  }
+  return missing.length === 1 ? missing[0] : `${missing.length} to fill in`;
 }
 
 export function computeGates(input: GateInput): Gate[] {
@@ -65,7 +97,7 @@ export function computeGates(input: GateInput): Gate[] {
           key: "items",
           label: "Items",
           state: "fail",
-          detail: "the cart could not be read — correct the lines below",
+          detail: "the cart could not be read — correct the lines",
         };
 
   let store: Gate;
@@ -110,24 +142,21 @@ export function computeGates(input: GateInput): Gate[] {
         };
 
   // Lowe's prints no prices, so materials starts at zero and the dispatcher
-  // enters it. That is a `todo`, not a failure.
+  // enters it, and the fees too. That is a `todo`, not a failure.
+  const priceMissing = missingPrice(input);
   const price: Gate =
-    input.deliverySize && input.materialsCents > 0 && input.totalCents > 0
+    priceMissing === null
       ? {
           key: "price",
           label: "Size & price",
           state: "pass",
-          detail: input.deliverySize,
+          detail: input.deliverySize ?? undefined,
         }
       : {
           key: "price",
           label: "Size & price",
           state: "todo",
-          detail: !input.deliverySize
-            ? "pick a size"
-            : input.materialsCents <= 0
-              ? "enter the materials cost"
-              : "enter the fees",
+          detail: priceMissing,
         };
 
   return [items, store, address, price];

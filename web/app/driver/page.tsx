@@ -137,7 +137,7 @@ function OpenJobCard({ posting }: { posting: JobPosting }) {
           </Badge>
           {size ? (
             <Badge tone="accent" bordered>
-              {size}
+              {size} needed
             </Badge>
           ) : null}
           <span className="ml-auto flex items-center gap-1 text-[13.5px] font-medium text-accent">

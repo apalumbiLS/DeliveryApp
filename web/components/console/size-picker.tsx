@@ -1,19 +1,19 @@
 import { cn } from "@/lib/utils";
 
 /**
- * Car · Pickup · Truck — the delivery vehicle class the sizing fee is keyed to.
+ * Car · Truck — the delivery vehicle class the sizing fee is keyed to.
  *
- * The stored values are lowercase (`car`, `pickup`, `truck`); these are the
+ * The stored values are lowercase (`car`, `truck`); these are the
  * labels. See the `delivery_size` enum in
- * supabase/migrations/0006_order_delivery_size.sql.
+ * supabase/migrations/0006_order_delivery_size.sql and
+ * 0016_car_and_truck.sql.
  */
-export const DELIVERY_SIZES = ["car", "pickup", "truck"] as const;
+export const DELIVERY_SIZES = ["car", "truck"] as const;
 
 export type DeliverySize = (typeof DELIVERY_SIZES)[number];
 
 export const DELIVERY_SIZE_LABELS: Record<DeliverySize, string> = {
   car: "Car",
-  pickup: "Pickup",
   truck: "Truck",
 };
 

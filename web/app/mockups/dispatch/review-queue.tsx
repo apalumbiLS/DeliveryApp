@@ -309,7 +309,7 @@ function PriceColumn() {
         <span className="text-[10.5px] text-ink-faint">sets the fee</span>
       </div>
       <div className="mt-1.5">
-        <SizePicker selected="Pickup" />
+        <SizePicker selected="Truck" />
       </div>
       <div className="mt-2.5 border-t border-hairline-soft pt-1.5">
         <PriceLine label="Materials" value={EMAIL.statedSubtotal} hint="cart" />
