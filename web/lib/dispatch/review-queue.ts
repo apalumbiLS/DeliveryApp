@@ -101,11 +101,6 @@ export type OrderDetail = {
    * no address for them. Sending for approval does not need it.
    */
   inviteRecipient: string | null;
-  /**
-   * True when an earlier prototype queued a checkout invite. Nothing sends it;
-   * those orders were marked `awaiting_customer` without the customer hearing.
-   */
-  inviteQueued: boolean;
   store: StoreOption | null;
   storeOptions: StoreOption[];
   alternatives: StoreOption[];
@@ -323,55 +318,42 @@ export async function loadOrderDetail(
   const order = orderData as OrderRow | null;
   if (!order) return null;
 
-  const [
-    companyResult,
-    itemsResult,
-    emailResult,
-    siteResult,
-    inviteResult,
-    driverResult,
-  ] = await Promise.all([
-    supabase
-      .from("companies")
-      .select("name, billing_email")
-      .eq("id", order.company_id)
-      .maybeSingle(),
-    supabase
-      .from("order_items")
-      .select(
-        "id, line_no, description, model_number, store_sku, quantity, image_url, product_url",
-      )
-      .eq("order_id", order.id)
-      .order("line_no", { ascending: true }),
-    order.inbound_email_id
-      ? supabase
-          .from("inbound_emails")
-          .select("id, sender_email, subject, received_at, body_html")
-          .eq("id", order.inbound_email_id)
-          .maybeSingle()
-      : Promise.resolve({ data: null }),
-    order.site_id
-      ? supabase
-          .from("company_sites")
-          .select("label, lat, lng")
-          .eq("id", order.site_id)
-          .maybeSingle()
-      : Promise.resolve({ data: null }),
-    supabase
-      .from("notifications")
-      .select("id, status")
-      .eq("order_id", order.id)
-      .eq("template_key", "checkout_invite")
-      .limit(1)
-      .maybeSingle(),
-    order.assigned_driver_id
-      ? supabase
-          .from("profiles")
-          .select("full_name, phone")
-          .eq("id", order.assigned_driver_id)
-          .maybeSingle()
-      : Promise.resolve({ data: null }),
-  ]);
+  const [companyResult, itemsResult, emailResult, siteResult, driverResult] =
+    await Promise.all([
+      supabase
+        .from("companies")
+        .select("name, billing_email")
+        .eq("id", order.company_id)
+        .maybeSingle(),
+      supabase
+        .from("order_items")
+        .select(
+          "id, line_no, description, model_number, store_sku, quantity, image_url, product_url",
+        )
+        .eq("order_id", order.id)
+        .order("line_no", { ascending: true }),
+      order.inbound_email_id
+        ? supabase
+            .from("inbound_emails")
+            .select("id, sender_email, subject, received_at, body_html")
+            .eq("id", order.inbound_email_id)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
+      order.site_id
+        ? supabase
+            .from("company_sites")
+            .select("label, lat, lng")
+            .eq("id", order.site_id)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
+      order.assigned_driver_id
+        ? supabase
+            .from("profiles")
+            .select("full_name, phone")
+            .eq("id", order.assigned_driver_id)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
 
   const company = companyResult.data as {
     name: string;
@@ -518,7 +500,6 @@ export async function loadOrderDetail(
     // user's email lives in `auth.users`, which needs the admin API to read.
     // `billing_email` is the fallback, not the first choice.
     inviteRecipient: order.requester_email ?? company?.billing_email ?? null,
-    inviteQueued: inviteResult.data !== null,
     store: chosen,
     storeOptions,
     alternatives,

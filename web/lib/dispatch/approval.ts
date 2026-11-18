@@ -15,8 +15,14 @@
 import type { Gate } from "./gates";
 import { blockingGate } from "./gates";
 
-/** The statuses an order can be sent from — the review queue's. */
-const SENDABLE_STATUSES = ["received", "needs_review"];
+/**
+ * The statuses an order can be sent from — the review queue's. The review
+ * page shows the Send bar for exactly these, so the two cannot drift apart.
+ */
+export const SENDABLE_STATUSES: readonly string[] = [
+  "received",
+  "needs_review",
+];
 
 export type SendDecision = { ok: true } | { ok: false; reason: string };
 
@@ -33,8 +39,6 @@ export function canSendForApproval(input: {
   }
 
   // Anything else means it was already sent, or has moved well beyond it.
-  // Orders an earlier prototype marked as invited are `awaiting_customer`, so
-  // this also keeps them from being sent twice.
   if (!SENDABLE_STATUSES.includes(input.status)) {
     return { ok: false, reason: `the order is already ${input.status}` };
   }

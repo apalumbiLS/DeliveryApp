@@ -1,9 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 
-import { setUserActive, updateUser } from "@/app/(console)/admin/actions";
+import {
+  setUserActive,
+  updateUser,
+  type UserRowState,
+} from "@/app/(console)/admin/actions";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { USER_ROLES, userRoleLabel, type UserRole } from "@/lib/tokens";
@@ -48,9 +52,18 @@ export function UserRowActions({
 
   const needsCompany = selectedRole === "customer" && !selectedCompany;
 
+  const [updateState, updateAction] = useActionState<UserRowState, FormData>(
+    updateUser,
+    undefined,
+  );
+  const [activeState, activeAction] = useActionState<UserRowState, FormData>(
+    setUserActive,
+    undefined,
+  );
+
   return (
     <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-hairline-soft pt-3">
-      <form action={updateUser} className="flex flex-wrap items-center gap-2">
+      <form action={updateAction} className="flex flex-wrap items-center gap-2">
         <input type="hidden" name="userId" value={userId} />
 
         <Select
@@ -86,11 +99,24 @@ export function UserRowActions({
         <SaveButton disabled={needsCompany} />
       </form>
 
-      <form action={setUserActive}>
+      <form action={activeAction}>
         <input type="hidden" name="userId" value={userId} />
         <input type="hidden" name="active" value={active ? "false" : "true"} />
         <ToggleButton active={active} />
       </form>
+
+      {/* Each form's own last result, so one form's success never leaves the
+          other's old error standing in for it. */}
+      {updateState?.error ? (
+        <p role="alert" className="w-full text-[12.5px] text-danger-ink">
+          {updateState.error}
+        </p>
+      ) : null}
+      {activeState?.error ? (
+        <p role="alert" className="w-full text-[12.5px] text-danger-ink">
+          {activeState.error}
+        </p>
+      ) : null}
     </div>
   );
 }

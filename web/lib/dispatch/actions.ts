@@ -13,7 +13,7 @@ import {
   saveDispatcherDraft,
   type DraftResult,
 } from "./draft-input";
-import { canSendForApproval } from "./approval";
+import { canSendForApproval, SENDABLE_STATUSES } from "./approval";
 import { requireDispatcher } from "./require-dispatcher";
 import { loadOrderDetail } from "./review-queue";
 
@@ -119,60 +119,78 @@ export async function updateOrderPayout(
   return finishDraftUpdate(orderId, saved);
 }
 
+/** Why an order-page action did not happen, shown in the gate bar. */
+export type OrderActionError = "send" | "undo" | "undo_failed" | "release";
+
+/**
+ * Back to the order's plain URL, so a tab picked by hand gives way to the one
+ * the order is in, with the error when the action did not happen.
+ */
+function backToOrder(orderId: string, error?: OrderActionError): never {
+  revalidatePath(`/dispatch/review/${orderId}`);
+  revalidatePath("/dispatch/review");
+  redirect(`/dispatch/review/${orderId}${error ? `?error=${error}` : ""}`);
+}
+
 /**
  * Send a verified order to the customer for approval.
  *
  * Moves it to `awaiting_customer` and records who did it. **No email goes out
  * and nothing is queued**: the checkout email is a later, extra trigger on this
- * same step. Rows an earlier prototype queued stay held by `send_approved`, and
- * a future outbox worker must not drain them by default.
+ * same step.
  */
 export async function sendForApproval(formData: FormData): Promise<void> {
   const { supabase, userId } = await requireDispatcher();
 
-  const orderId = String(formData.get("orderId") ?? "");
-  if (!orderId) return;
+  // A bad ID or a missing order goes back to the queue rather than leaving
+  // the button doing nothing.
+  const orderId = orderIdFrom(formData);
+  if (!orderId) redirect("/dispatch/review");
 
   // Re-derive everything rather than trusting the render that produced the
   // form. A disabled button is a UI state; a server action can be invoked
   // directly, so this is the actual guard.
   const detail = await loadOrderDetail(supabase, orderId);
-  if (!detail) return;
+  if (!detail) redirect("/dispatch/review");
 
   const decision = canSendForApproval({
     status: detail.order.status,
     gates: detail.gates,
   });
 
-  if (decision.ok) {
-    // Conditional on the status just checked, so two dispatchers sending at
-    // once move it once and record one event.
-    const { data: moved } = await supabase
-      .from("orders")
-      .update({ status: "awaiting_customer" })
-      .eq("id", orderId)
-      .eq("status", detail.order.status)
-      .select("id")
-      .maybeSingle();
-
-    if (moved) {
-      await supabase.from("order_status_events").insert({
-        order_id: orderId,
-        from_status: detail.order.status,
-        to_status: "awaiting_customer",
-        actor_profile_id: userId,
-        actor_role: "dispatcher",
-        source: "console",
-        note: "sent for approval — no email sent",
-      });
-    }
+  if (!decision.ok) {
+    // Already sent, by someone else a moment ago, is not a failure: the page
+    // will say so. Anything still in review that cannot go is.
+    backToOrder(
+      orderId,
+      SENDABLE_STATUSES.includes(detail.order.status) ? "send" : undefined,
+    );
   }
 
-  // Either way the page should show what is true now. Back to the order's
-  // plain URL, so a tab picked by hand gives way to the one the order is in.
-  revalidatePath(`/dispatch/review/${orderId}`);
-  revalidatePath("/dispatch/review");
-  redirect(`/dispatch/review/${orderId}`);
+  // Conditional on the status just checked, so two dispatchers sending at
+  // once move it once and record one event.
+  const { data: moved, error } = await supabase
+    .from("orders")
+    .update({ status: "awaiting_customer" })
+    .eq("id", orderId)
+    .eq("status", detail.order.status)
+    .select("id")
+    .maybeSingle();
+  if (error) backToOrder(orderId, "send");
+
+  if (moved) {
+    await supabase.from("order_status_events").insert({
+      order_id: orderId,
+      from_status: detail.order.status,
+      to_status: "awaiting_customer",
+      actor_profile_id: userId,
+      actor_role: "dispatcher",
+      source: "console",
+      note: "sent for approval — no email sent",
+    });
+  }
+
+  backToOrder(orderId);
 }
 
 /**
@@ -185,7 +203,7 @@ export async function undoSendForApproval(formData: FormData): Promise<void> {
   const orderId = orderIdFrom(formData);
   if (!orderId) return;
 
-  const { data: moved } = await supabase
+  const { data: moved, error } = await supabase
     .from("orders")
     .update({ status: "needs_review" })
     .eq("id", orderId)
@@ -205,9 +223,21 @@ export async function undoSendForApproval(formData: FormData): Promise<void> {
     });
   }
 
-  revalidatePath(`/dispatch/review/${orderId}`);
-  revalidatePath("/dispatch/review");
-  redirect(`/dispatch/review/${orderId}`);
+  if (error) backToOrder(orderId, "undo_failed");
+  if (moved) backToOrder(orderId);
+
+  // Not moved: if another dispatcher undid it a moment ago, it is back in
+  // review and that is what was wanted. Otherwise the customer approved first.
+  const { data: current } = await supabase
+    .from("orders")
+    .select("status")
+    .eq("id", orderId)
+    .maybeSingle();
+  const status = (current as { status: string } | null)?.status;
+  backToOrder(
+    orderId,
+    status && SENDABLE_STATUSES.includes(status) ? undefined : "undo",
+  );
 }
 
 /**
@@ -219,11 +249,11 @@ export async function releaseDriver(formData: FormData): Promise<void> {
   const orderId = orderIdFrom(formData);
   if (!orderId) return;
 
-  await supabase.rpc("release_driver", { p_order_id: orderId });
+  const { error } = await supabase.rpc("release_driver", {
+    p_order_id: orderId,
+  });
 
-  revalidatePath(`/dispatch/review/${orderId}`);
-  revalidatePath("/dispatch/review");
-  redirect(`/dispatch/review/${orderId}`);
+  backToOrder(orderId, error ? "release" : undefined);
 }
 
 export async function approveInboundEmail(formData: FormData): Promise<void> {

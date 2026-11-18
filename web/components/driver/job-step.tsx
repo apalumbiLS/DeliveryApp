@@ -100,6 +100,15 @@ export function JobStep({ orderId, step }: { orderId: string; step: Step }) {
       });
       if (!result.ok) {
         setError(result.message);
+        // The step did not record the photo, so nothing points at it. Best
+        // effort and not awaited: on bad signal the driver should see the
+        // error now, and a retry uploads a fresh photo either way.
+        if (uploaded) {
+          void createClient()
+            .storage.from("evidence")
+            .remove([uploaded.path])
+            .catch(() => {});
+        }
         return;
       }
       choosePhoto(null);

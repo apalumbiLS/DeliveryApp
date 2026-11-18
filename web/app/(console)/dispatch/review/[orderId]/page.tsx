@@ -33,6 +33,7 @@ import {
 import { IntroDialog } from "@/components/console/intro-dialog";
 import { JobLink } from "@/components/console/job-link";
 import { LiveTotal } from "@/components/console/live-total";
+import { ActionError } from "@/components/console/action-error";
 import { ReleaseDriver } from "@/components/console/release-driver";
 import { UndoSend } from "@/components/console/undo-send";
 import { QUEUE_VIEW_EMPTY, QueueTabs } from "@/components/console/queue-tabs";
@@ -46,11 +47,13 @@ import { Badge } from "@/components/ui/badge";
 import { AlertIcon, CheckIcon, TagIcon } from "@/components/ui/icons";
 import {
   sendForApproval,
+  type OrderActionError,
   updateOrderDelivery,
   updateOrderPayout,
   updateOrderQuote,
   updateOrderStore,
 } from "@/lib/dispatch/actions";
+import { SENDABLE_STATUSES } from "@/lib/dispatch/approval";
 import {
   loadDriverEvidence,
   type DriverEvidence,
@@ -1013,7 +1016,7 @@ const GATE_TARGETS: Record<Gate["key"], string> = {
 };
 
 /** The review queue's statuses. Past them, the order has been sent on. */
-const IN_REVIEW = ["received", "needs_review"];
+const IN_REVIEW = SENDABLE_STATUSES;
 
 /** From a driver accepting the job up to delivery. */
 const WITH_DRIVER = [
@@ -1031,10 +1034,6 @@ function driverLabel(driver: NonNullable<OrderDetail["driver"]>): string {
 }
 
 function gateNote(detail: OrderDetail, blocker: Gate | null): string | null {
-  if (detail.inviteQueued) {
-    return "An earlier prototype queued an invite, but no email was sent. Dispatcher follow-up is required.";
-  }
-
   if (detail.order.status === "awaiting_customer") {
     return "Waiting on the customer to approve in the portal. No email is sent yet.";
   }
@@ -1060,12 +1059,22 @@ function gateNote(detail: OrderDetail, blocker: Gate | null): string | null {
   return "Ready to send — the customer never sees a price we haven't checked.";
 }
 
+/** What the gate bar says when an action sent back `?error=`. */
+const ACTION_ERRORS: Record<OrderActionError, string> = {
+  send: "Couldn't send for approval. Refresh the page and check what's marked.",
+  undo: "Couldn't undo the send. The customer may have approved it already.",
+  undo_failed: "Couldn't undo the send. Refresh the page and try again.",
+  release: "Couldn't release the driver. Refresh the page and try again.",
+};
+
 function GateBar({
   detail,
   orderId,
+  error,
 }: {
   detail: OrderDetail;
   orderId: string;
+  error: OrderActionError | null;
 }) {
   const blocker = blockingGate(detail.gates);
   const { status } = detail.order;
@@ -1073,6 +1082,7 @@ function GateBar({
 
   return (
     <div className="sticky bottom-0 mt-3 border-t border-hairline bg-surface pt-3 pb-3">
+      {error ? <ActionError message={ACTION_ERRORS[error]} /> : null}
       <div className="flex items-end justify-between gap-4">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
@@ -1089,14 +1099,7 @@ function GateBar({
 
         <div className="flex shrink-0 items-center gap-3">
           <DraftSaveBar />
-          {detail.inviteQueued ? (
-            // The order's status already says `awaiting_customer`, which implies a
-            // message went out. It did not. This says so rather than letting the
-            // state quietly overstate what happened.
-            <span className="shrink-0 rounded-control bg-warning-bg px-3 py-1.5 text-[11.5px] font-medium text-warning-ink">
-              Invite queued — not sent
-            </span>
-          ) : IN_REVIEW.includes(status) ? (
+          {IN_REVIEW.includes(status) ? (
             <form action={sendForApproval} className="shrink-0">
               <input type="hidden" name="orderId" value={orderId} />
               <SubmitWhenSaved
@@ -1140,7 +1143,11 @@ export default async function ReviewOrderPage(
   props: PageProps<"/dispatch/review/[orderId]">,
 ) {
   const { orderId } = await props.params;
-  const { view: requested } = await props.searchParams;
+  const { view: requested, error: rawError } = await props.searchParams;
+  const error =
+    typeof rawError === "string" && Object.hasOwn(ACTION_ERRORS, rawError)
+      ? (rawError as OrderActionError)
+      : null;
   const { supabase } = await requireDispatcher();
 
   const detail = await loadOrderDetail(supabase, orderId);
@@ -1198,7 +1205,7 @@ export default async function ReviewOrderPage(
               <DriverBand detail={detail} evidence={evidence} />
             ) : null}
           </div>
-          <GateBar detail={detail} orderId={orderId} />
+          <GateBar detail={detail} orderId={orderId} error={error} />
         </DraftsProvider>
       </div>
     </div>

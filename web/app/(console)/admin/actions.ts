@@ -60,39 +60,70 @@ export async function createUser(
   redirect("/admin");
 }
 
-export async function updateUser(formData: FormData) {
-  const { supabase } = await requireAdmin();
+/** A user row's last save: why it failed, or nothing. */
+export type UserRowState = { error: string } | undefined;
+
+const SAVE_FAILED = "Couldn't save. Refresh the page and try again.";
+
+export async function updateUser(
+  _previous: UserRowState,
+  formData: FormData,
+): Promise<UserRowState> {
+  const { supabase, userId: actorId } = await requireAdmin();
 
   const userId = String(formData.get("userId") ?? "");
   const role = String(formData.get("role") ?? "");
   const companyId = String(formData.get("companyId") ?? "").trim() || null;
 
-  if (!userId || !isUserRole(role)) return;
+  if (!userId || !isUserRole(role)) return { error: "Pick a role." };
 
   // Never trust the pair from the form: the database would reject a customer
   // with no company, but it should not be the thing that catches this.
-  if (role === "customer" && !companyId) return;
+  if (role === "customer" && !companyId) {
+    return { error: "Pick a company for this customer." };
+  }
 
-  await supabase
+  // Dropping your own dispatcher role locks you out of this page.
+  if (userId === actorId && role !== "dispatcher") {
+    return { error: "You can't change your own role." };
+  }
+
+  const { data, error } = await supabase
     .from("profiles")
     .update({ role, company_id: role === "customer" ? companyId : null })
-    .eq("id", userId);
+    .eq("id", userId)
+    .select("id")
+    .maybeSingle();
+  if (error || !data) return { error: SAVE_FAILED };
 
   revalidatePath("/admin");
+  return undefined;
 }
 
-export async function setUserActive(formData: FormData) {
+export async function setUserActive(
+  _previous: UserRowState,
+  formData: FormData,
+): Promise<UserRowState> {
   const { supabase, userId: actorId } = await requireAdmin();
 
   const userId = String(formData.get("userId") ?? "");
   const active = String(formData.get("active") ?? "") === "true";
 
-  if (!userId) return;
+  if (!userId) return { error: SAVE_FAILED };
 
   // An admin locking themselves out is unrecoverable from inside the app.
-  if (userId === actorId && !active) return;
+  if (userId === actorId && !active) {
+    return { error: "You can't deactivate your own account." };
+  }
 
-  await supabase.from("profiles").update({ active }).eq("id", userId);
+  const { data, error } = await supabase
+    .from("profiles")
+    .update({ active })
+    .eq("id", userId)
+    .select("id")
+    .maybeSingle();
+  if (error || !data) return { error: SAVE_FAILED };
 
   revalidatePath("/admin");
+  return undefined;
 }

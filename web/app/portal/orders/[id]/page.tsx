@@ -3,8 +3,8 @@
  *
  * The items as we read them from the cart, where they are bought and
  * delivered, and the estimated price. Lowe's prints no prices, so materials is
- * a single estimate from Lowe's checkout rather than a price per line, and the
- * total is an estimate until the receipt is in.
+ * a single estimate from Lowe's checkout rather than a price per line. Nothing
+ * adjusts the total from the receipt yet, so the page does not promise it.
  *
  * While the order awaits approval, the customer confirms the on-site contact
  * and instructions — the only delivery details they may change — and approves
@@ -313,8 +313,8 @@ function PriceCard({ order }: { order: CustomerOrder }) {
             </span>
           </div>
           <p className="mt-2 text-[13px] leading-relaxed text-ink-faint">
-            This is an estimate. The final total uses the {order.retailerLabel}{" "}
-            receipt.
+            This is an estimate. {order.retailerLabel} prices can change before
+            the driver buys your items.
           </p>
         </>
       ) : (

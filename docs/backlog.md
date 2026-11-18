@@ -20,7 +20,6 @@ Things deliberately left out of the MVP are under [Deferred (post-MVP)](#deferre
 - **Lifecycle for payment.** Redo the payment states in [04-order-lifecycle](architecture/04-order-lifecycle.md) for pay-on-approval; nothing moves an order past `delivered` today (`payment_requested`, `paid`, `closed` are unused).
 - **Check the payment key matches the environment at startup** (test key outside production, live key in it).
 - **Update the portal's "After you approve" list,** which still ends "Delivered → You pay" (`web/components/portal/approve-order.tsx`), and add a payment step to the portal's progress.
-- **Final total from the receipt.** The portal says "the final total uses the receipt", but nothing records the receipt amount or adjusts the total (`web/app/portal/orders/[id]/page.tsx`).
 - **Tax and discount.** Both feed the total, but nothing ever sets them.
 
 ## Notifications
@@ -42,7 +41,6 @@ Things deliberately left out of the MVP are under [Deferred (post-MVP)](#deferre
 - **Two Mailgun signing keys during the account handoff,** so the old address keeps working while moving to the client's Mailgun account and domain. Code reads only `MAILGUN_SIGNING_KEY`.
 - **Test with a real Mailgun payload.** Capture a redacted real webhook POST as a test, and check retry and timestamp behaviour.
 - **Expire abandoned order intents.** A cron sweep; matching itself is built.
-- **`.env.example` intake flag.** `ORDER_INTAKE_READY=true` contradicts its own comment and the deployment doc, which say it defaults to false.
 
 ## Dispatch console
 
@@ -55,8 +53,7 @@ Things deliberately left out of the MVP are under [Deferred (post-MVP)](#deferre
 - **Close out or cancel an order.** Nothing moves a delivered order on, and nothing cancels one (`cancelled` and `cancellation_reason` are unused).
 - **Show waiting time** on queue entries; today they only sort oldest first.
 - **Search and paging in the queue.** Each tab shows at most 50 orders.
-- **Surface failures.** Send for approval, Release driver and Undo send fail silently; the status change and its audit event are separate calls. Move them into one database function each ([04-order-lifecycle](architecture/04-order-lifecycle.md) requires one transaction).
-- **Remove the old "prototype queued invite" handling** for legacy test rows (`web/lib/dispatch/review-queue.ts`, `approval.ts`, the review page).
+- **One transaction per status change.** Send for approval and Undo send change the status and write the audit event in separate calls. Move each into one database function ([04-order-lifecycle](architecture/04-order-lifecycle.md) requires one transaction).
 
 ## Customer portal
 
@@ -71,14 +68,12 @@ Things deliberately left out of the MVP are under [Deferred (post-MVP)](#deferre
 - **Declining a job.** A Decline button, recording it (`job_declines` exists, nothing writes to it), reporting each decline to the dispatcher, and "nobody available" once every driver has declined ([07-dispatch](architecture/07-dispatch.md)).
 - **Report a problem mid-job.** The driver guide acknowledges it's missing.
 - **Earnings history.** Payout totals across jobs; Delivered lists only the last 50.
-- **Clean up orphaned photos.** If a step fails after the photo uploads, the file stays in storage.
 
 ## Admin and accounts
 
 - **Company management.** Create and edit companies and their order alias; today it's SQL only.
 - **Phone number on user accounts.** The admin form has no phone field, so drivers show no number to dispatchers.
 - **Store and site management.** No console for job sites or for Lowe's stores (active flag, new stores).
-- **Admin actions swallow errors.** `updateUser` and `setUserActive` ignore the result, and an admin can change their own role (`web/app/(console)/admin/actions.ts`).
 
 ## Operations and launch setup
 
@@ -89,8 +84,6 @@ Things deliberately left out of the MVP are under [Deferred (post-MVP)](#deferre
 - **Apply and verify the SC store seed** (`supabase/seed/0003_sc_stores.sql`) in each environment and check the 52 stores against Lowe's store locator.
 - **Pilot data.** Create the pilot companies, aliases and accounts (dispatchers, customers, drivers with phones).
 - **LLM fallback key** — deferred with the fallback itself.
-- **Hide `/mockups` and `/design` in production.**
-- **Remove the default Next.js images** in `web/public` (`file`, `globe`, `next`, `vercel`, `window` SVGs).
 
 ## Before launch
 
