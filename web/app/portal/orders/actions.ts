@@ -34,7 +34,9 @@ export async function approveOrder(
       p_instructions: input.value.instructions,
     });
     approved = !error && data === orderId;
-  } catch {
+    if (error) console.error("approve_order failed", orderId, error);
+  } catch (error) {
+    console.error("approve_order threw", orderId, error);
     approved = false;
   }
 

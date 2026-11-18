@@ -16,16 +16,11 @@ import {
   type DeliverySize,
 } from "@/components/console/size-picker";
 import { JobStep } from "@/components/driver/job-step";
+import { NavigateLink } from "@/components/driver/navigate-link";
 import { Badge } from "@/components/ui/badge";
-import { button } from "@/components/ui/button";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { Card } from "@/components/ui/card";
-import {
-  AlertIcon,
-  CheckIcon,
-  PhoneIcon,
-  PinIcon,
-} from "@/components/ui/icons";
+import { AlertIcon, CheckIcon, PhoneIcon } from "@/components/ui/icons";
 import { SUPPORT_PHONE } from "@/lib/brand";
 import { acceptJob } from "@/lib/driver/actions";
 import {
@@ -56,9 +51,8 @@ const money = new Intl.NumberFormat("en-US", {
 
 const time = new Intl.DateTimeFormat("en-US", { timeStyle: "short" });
 
-function mapsUrl(...parts: (string | null)[]): string {
-  const query = parts.filter(Boolean).join(", ");
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+function placeQuery(...parts: (string | null)[]): string {
+  return parts.filter(Boolean).join(", ");
 }
 
 function sizeLabel(size: string | null): string | null {
@@ -81,20 +75,6 @@ function SectionCard({
       </h2>
       <div className="mt-2">{children}</div>
     </Card>
-  );
-}
-
-function NavigateLink({ href }: { href: string }) {
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noreferrer"
-      className={cn(button({ intent: "secondary", size: "md" }), "mt-3")}
-    >
-      <PinIcon className="h-4 w-4" />
-      Navigate
-    </a>
   );
 }
 
@@ -397,7 +377,8 @@ function JobView({ job, canAct }: { job: DriverJob; canAct: boolean }) {
           </div>
         ) : null}
         <NavigateLink
-          href={mapsUrl(
+          className="mt-3"
+          query={placeQuery(
             `${job.retailerLabel} ${job.store.name ?? ""}`.trim(),
             job.store.address,
             job.store.town,
@@ -444,7 +425,10 @@ function JobView({ job, canAct }: { job: DriverJob; canAct: boolean }) {
             {delivery.instructions}
           </p>
         ) : null}
-        <NavigateLink href={mapsUrl(delivery.street, delivery.town)} />
+        <NavigateLink
+          className="mt-3"
+          query={placeQuery(delivery.street, delivery.town)}
+        />
       </SectionCard>
 
       <Progress job={job} />

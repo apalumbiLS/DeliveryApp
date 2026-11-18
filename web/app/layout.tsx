@@ -18,6 +18,8 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: { default: APP_NAME, template: `%s · ${APP_NAME}` },
   description: "We buy construction materials and deliver them to your site.",
+  // Opens full screen from the iOS home screen; the icon is app/apple-icon.tsx.
+  appleWebApp: { capable: true, title: "Materials", statusBarStyle: "default" },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
