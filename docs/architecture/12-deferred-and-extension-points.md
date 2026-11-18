@@ -40,7 +40,7 @@ Each entry below states the hook that already exists. If an item has no hook, th
 
 |                  |                                                                                                                                        |
 | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| **What**         | Email or SMS the customer automatically on each status change instead of the dispatcher doing it by hand                               |
+| **What**         | Notify the customer automatically on each status change instead of the dispatcher doing it by hand. **First slice planned for the pilot:** Web Push when the order is sent for approval, when the driver is on the way, and when it is delivered (decided 2026-11-18, not built) |
 | **Why deferred** | Listed as vNext in your workflow doc; the MVP keeps the dispatcher in control while the process is being validated                     |
 | **Hook**         | `order_status_events` is an append-only log of every transition — this is the event source. `notifications` already has a `dedupe_key` |
 | **To build**     | A fan-out on `order_status_events` (sweep or trigger), plus templates                                                                  |
@@ -64,8 +64,8 @@ Each entry below states the hook that already exists. If an item has no hook, th
 
 | | |
 |---|---|
-| **What** | Parsers for the two retailers that are not live. Lowe's is the only retailer a customer can select — Home Depot and Ace show as "Coming soon" on the start-an-order page |
-| **Why deferred** | Neither has seeded store locations, so neither can be selected or dispatched to. Building a parser for a retailer nobody can order from is speculative work that would drift before it was ever used |
+| **What** | Parsers for the two retailers that are not live. Lowe's is the only retailer a customer can select — Home Depot and Ace show as "Coming soon" on the start-an-order page. **Home Depot is planned for the pilot**; Ace stays deferred |
+| **Why deferred** | Neither has seeded store locations, so neither can be selected or dispatched to yet. Ace has no sample at all |
 | **Hook** | The `CartParser` interface is retailer-agnostic and selected by sender domain, so adding one is a new file plus a fixture — no change to the pipeline, the schema, or the console |
 | **To build** | Seed the retailer's stores, then implement its parser against a real sample. **Home Depot's field map is already verified** against two samples and kept as reference in [06-cart-parsing](06-cart-parsing.md) — the analysis exists, only the code does not |
 | **Size** | Small for Home Depot — field map verified, samples in hand. Unknown for Ace, which has no sample |
@@ -139,10 +139,10 @@ Each entry below states the hook that already exists. If an item has no hook, th
 |                  |                                                                                                                                                                           |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **What**         | Tell the driver exactly where in the store each item is                                                                                                                   |
-| **Why deferred** | Home Depot does populate them (one sample carries `Aisle 15`/`Bay 002`), but they are store-scoped and the email never names the store — so they are only trustworthy once the order carries a customer-confirmed store                                                                    |
-| **Hook**         | `order_items.aisle` and `order_items.bay` columns exist and are already parsed                                                                                            |
-| **To build**     | Nothing to parse. The gate is store confirmation on the order, not data capture                                                                                           |
-| **Size**         | Small, once store confirmation exists                                                                                                                                     |
+| **Why deferred** | Aisle and bay appear only in Home Depot emails (one sample carries `Aisle 15`/`Bay 002`), and nothing parses Home Depot yet. The Lowe's email has no aisle or bay. They are store-scoped, so they are only trustworthy for the store the customer chose |
+| **Hook**         | `order_items.aisle` and `order_items.bay` columns exist, and the parser output type already has `aisle` and `bay` fields (the Lowe's parser leaves them empty)            |
+| **To build**     | Read them in the Home Depot parser, then show them to the driver                                                                                                          |
+| **Size**         | Small, once the Home Depot parser exists                                                                                                                                  |
 
 ### Live price and stock re-verification
 
@@ -173,9 +173,9 @@ Each entry below states the hook that already exists. If an item has no hook, th
 |                  |                                                                         |
 | ---------------- | ----------------------------------------------------------------------- |
 | **What**         | Full or partial refunds                                                 |
-| **Why deferred** | No refund policy yet; unlikely to be needed during a supervised dry run |
+| **Why deferred** | No refund policy yet; unlikely to be needed during a supervised pilot   |
 | **Hook**         | `refunded` is already in the `payment_status` enum                      |
-| **To build**     | A Stripe refund call and a dispatcher action                            |
+| **To build**     | A refund call to the payment processor and a dispatcher action          |
 | **Size**         | Small                                                                   |
 
 ### Driver payouts
@@ -207,9 +207,9 @@ Each entry below states the hook that already exists. If an item has no hook, th
 |                  |                                                                                                                                                           |
 | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **What**         | Text updates to customers, not just drivers                                                                                                               |
-| **Why deferred** | Customers are email-native and started the interaction by email; A2P registration is already needed for drivers, so the marginal cost is low but not zero |
-| **Hook**         | `notifications.channel` already supports `sms`; Twilio is already integrated                                                                              |
-| **To build**     | A phone field on the checkout flow and a template                                                                                                         |
+| **Why deferred** | Web Push to the home-screen app comes first for customers and drivers (decided 2026-11-18); texts come later as a fallback. Twilio is not set up yet and needs US carrier (A2P 10DLC) registration |
+| **Hook**         | `notifications.channel` already supports `sms`; the customer confirms an on-site contact phone at approval                                                |
+| **To build**     | Twilio account and registration, a sender, and templates                                                                                                  |
 | **Size**         | Small                                                                                                                                                     |
 
 ### Slack integration
@@ -251,10 +251,11 @@ Each entry below states the hook that already exists. If an item has no hook, th
 |                  |                                                                                                                                                          |
 | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **What**         | Tie an arriving cart email to the intent the customer started, and expire intents nobody followed through on                                              |
-| **Why deferred** | Matching belongs to email intake, which is not built. The portal writes and reads intents today, but nothing consumes them yet                            |
-| **Hook**         | `order_intents.status` already carries `matched` and `expired`, and the `(status, created_at)` index exists for the sweep                                 |
-| **To build**     | A matcher on the inbound path, and a cron sweep over open intents older than a window                                                                     |
-| **Size**         | Medium                                                                                                                                                    |
+| **Status**       | **Matching is built.** A cart sent to an intent's `delivery+<token>` address is tied to it, and the intent is marked `matched` when the order is created. Only the expiry sweep is not built |
+| **Why deferred** | The sweep needs a cron job, and there are none yet                                                                                                        |
+| **Hook**         | `order_intents.status` already carries `expired`, and the `(status, created_at)` index exists for the sweep                                               |
+| **To build**     | A cron sweep over open intents older than a window                                                                                                        |
+| **Size**         | Small                                                                                                                                                     |
 
 ### Automated re-broadcast on expiry
 
@@ -262,8 +263,8 @@ Each entry below states the hook that already exists. If an item has no hook, th
 |----------------|-------------------------------------------------------------------------------|
 | **What**         | Re-broadcast automatically when nobody accepts                                  |
 | **Why deferred** | An unfilled order is a signal a human should see, especially early on           |
-| **Hook**         | The expiry sweep already runs; it currently notifies instead of re-broadcasting |
-| **To build**     | Widen the pool and re-broadcast in the existing sweep                           |
+| **Hook**         | `release_driver()` already re-posts a job; the expiry sweep is designed but not built |
+| **To build**     | The expiry sweep, then widen the pool and re-broadcast in it                    |
 | **Size**         | Small                                                                           |
 
 ---
@@ -279,11 +280,11 @@ Every intake option and vNext idea from the source PDFs, and where it landed.
 | Parser (could be done by a person)                 | **MVP** — [06-cart-parsing](06-cart-parsing.md); the human path survives as the review queue |
 | Attach order to the appropriate user               | **MVP** — alias-based attribution                                                            |
 | Temp email from website                            | **Rejected** — a per-company alias is simpler and stable                                     |
-| Notification the order has been parsed             | **MVP** — `order_received_ack`                                                               |
-| Standard checkout experience                       | **MVP** — post-intake portal checkout                                                        |
-| Verify order items / total cost                    | **MVP** — checkout wizard                                                                    |
-| Delivery address / fee / instructions              | **MVP** — checkout wizard                                                                    |
-| Payment (might direct to external site)            | **MVP** — Stripe Payment Links                                                               |
+| Notification the order has been parsed             | **Not built** — the customer sees the order in the portal; push when sent for approval is planned |
+| Standard checkout experience                       | **MVP** — portal approval                                                                    |
+| Verify order items / total cost                    | **MVP** — portal approval page                                                               |
+| Delivery address / fee / instructions              | **MVP** — address chosen when starting the order; fees typed by the dispatcher; contact and drop-off instructions confirmed at approval |
+| Payment (might direct to external site)            | **Planned** — customer pays at approval (decided 2026-11-18, not built)                      |
 | Parts database (concierge procurement)             | Deferred                                                                                     |
 | Smart iFrame                                       | Deferred — blocked on ToS                                                                    |
 | Chat experience                                    | Deferred                                                                                     |
@@ -293,8 +294,8 @@ Every intake option and vNext idea from the source PDFs, and where it landed.
 | Driver/dispatcher updates status in admin view     | **MVP** — dispatcher console + driver app                                                    |
 | Automated texting of status                        | Deferred — see automated status fan-out                                                      |
 | Replenish funds                                    | Deferred — see prepaid billing                                                               |
-| Automate dispatcher                                | **Partially MVP** — broadcast, acceptance, and fee capture automated; review remains human   |
-| Broadcasting to agents based on filters            | **MVP (unfiltered)** — fan-out to all active drivers                                         |
+| Automate dispatcher                                | **Partially MVP** — posting on approval and first-accept-wins are automated; review and fees remain human |
+| Broadcasting to agents based on filters            | **MVP (unfiltered)** — every active driver sees every posting; the job link is sent by hand until push is built |
 | Automated cart parsing                             | **MVP** — this is the core of the product                                                    |
 | Highlighted item numbers / aisles / store location | **Partial** — model numbers and store are MVP; aisle/bay deferred                            |
 | Centralizing confirmation photos                   | **MVP** — `attachments` + private storage                                                    |
@@ -304,5 +305,5 @@ Every intake option and vNext idea from the source PDFs, and where it landed.
 | Order cancellation                                 | Deferred                                                                                     |
 | Who places the order                               | **Resolved** — the driver purchases; the customer never does                                 |
 | Driver selection vs volunteering                   | **Resolved** — volunteer, first-accept-wins                                                  |
-| Communication channels                             | **Resolved** — in-app + SMS; email to customers                                              |
+| Communication channels                             | **Resolved** — in-app; Web Push first (planned), Twilio texts later, email later            |
 | QR/handoff confirmation                            | Deferred                                                                                     |

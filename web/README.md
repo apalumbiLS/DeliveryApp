@@ -1,6 +1,13 @@
 # Delivery App — web
 
-Next.js app for the construction-site delivery service. Three role-guarded route groups (`/dispatch`, `/driver`, `/portal`) will live here.
+Next.js app for the construction-site delivery service. Routes in `app/`:
+
+- `(auth)` — `/login`, `/request-access`.
+- `(console)` — the dispatcher console: `/dispatch` (review queue and orders) and `/admin` (users).
+- `/driver` — the driver's jobs and steps.
+- `/portal` — the customer portal: start an order, approve it, follow delivery.
+- `/api/webhooks/mailgun/{inbound,mime}` — inbound cart email.
+- `/mockups` and `/design` — design references; they return 404 in production.
 
 Architecture, ADRs, and runbooks: [`../docs/`](../docs/README.md).
 

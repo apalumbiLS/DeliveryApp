@@ -1,42 +1,50 @@
-ok.  we'll leave it.# 04 — Order Lifecycle
+# 04 — Order Lifecycle
 
 The state machine, who may trigger each transition, and what happens as a side effect.
 
-> **Status:** Planned design. Not yet implemented. This document is the specification for `src/lib/orders/state-machine.ts`.
+> **Status:** Built from order creation through `delivered` (migrations `0009`–`0018`, all applied). Nothing moves an order past `delivered` yet. Payment, cancellation and notifications are not built.
 
 ---
 
-## Why this is a single choke point
+## Where status changes happen
 
-Every status change in the system goes through one function, `transitionOrder()`. Nothing else writes `orders.status` — not a route handler, not a server action, not a cron sweep.
+There is no single TypeScript choke point. Each transition is its own SQL function, plus two direct updates from the dispatcher console:
 
-That gives us four things that would otherwise be scattered and eventually inconsistent:
+| Change | Where |
+| --- | --- |
+| Order created (`received`) | `finalize_inbound_cart` — called by the `/mime` webhook or by a dispatcher approving an inbound preview |
+| Send for approval, Undo send | Direct update in `web/lib/dispatch/actions.ts` (`sendForApproval`, `undoSendForApproval`), conditional on the current status, then a separate event insert |
+| Customer approval | `approve_order` |
+| Accept | `accept_job` |
+| Driver steps | `advance_job` |
+| Release driver | `release_driver` |
 
-1. **Transition legality** is checked in one place.
-2. **Role authorisation** is checked in one place.
-3. **The audit event** is always written.
-4. **Side effects** (notifications, scheduled work) are declared per transition rather than remembered per call site.
+Each function locks the order row, checks the caller's role and the current status, and writes the change and its `order_status_events` row in one transaction. The rules live **inside these functions**, not in table constraints. Customers and drivers hold no write policy on `orders`, so for them the functions are the only way in. Dispatchers do hold a write policy on `orders` (RLS `for all`), so the database does not stop a dispatcher session from writing any status; the console only offers the transitions below. Function details are in [03-data-model](03-data-model.md#sql-functions).
+
+No transition sends an email, text or push. See [08-notifications](08-notifications.md).
 
 ---
 
 ## States
 
-| State                | Meaning                                                                                              | Terminal |
-| -------------------- | ---------------------------------------------------------------------------------------------------- | -------- |
-| `received`           | Cart email parsed; order exists but the dispatcher hasn't reviewed it                                |          |
-| `needs_review`       | Parsing failed. Waiting on a dispatcher to resolve items                                             |          |
-| `awaiting_customer`  | Checkout invite sent; waiting on the customer to verify items, give an address, and accept the price |          |
-| `customer_confirmed` | Items verified, address captured, price accepted. Ready to dispatch                                  |          |
-| `driver_requested`   | Broadcast to all active drivers; no acceptance yet                                                   |          |
-| `driver_assigned`    | A driver has accepted                                                                                |          |
-| `driver_at_store`    | Driver has arrived and is purchasing                                                                 |          |
-| `items_purchased`    | Materials bought; receipt captured or skipped with a reason                                          |          |
-| `en_route`           | Driver is in transit to the job site                                                                 |          |
-| `delivered`          | Delivered; delivery photo captured or skipped with a reason                                          |          |
-| `payment_requested`  | Stripe Payment Link sent                                                                             |          |
-| `paid`               | Payment confirmed by Stripe webhook                                                                  |          |
-| `closed`             | Order complete                                                                                       | ✓        |
-| `cancelled`          | Order abandoned                                                                                      | ✓        |
+| State                | Meaning today                                                                                          | Terminal |
+| -------------------- | ------------------------------------------------------------------------------------------------------ | -------- |
+| `received`           | Order created from a cart email; waiting for dispatcher review                                         |          |
+| `needs_review`       | Back in review after a dispatcher used Undo send. Reviewed the same way as `received`                  |          |
+| `awaiting_customer`  | Sent for approval; the customer sees it in the portal. No email is sent                                |          |
+| `customer_confirmed` | Recorded at approval only: `approve_order` moves straight on to `driver_requested`                     |          |
+| `driver_requested`   | Posted to drivers ("Finding driver"); no driver has accepted                                           |          |
+| `driver_assigned`    | A driver has accepted                                                                                  |          |
+| `driver_at_store`    | Driver tapped "I'm at the store"                                                                       |          |
+| `items_purchased`    | Materials bought; receipt photo captured or skipped with a reason                                      |          |
+| `en_route`           | Driver tapped "On my way"                                                                              |          |
+| `delivered`          | Delivered; delivery photo captured or skipped with a reason. The last step today                       |          |
+| `payment_requested`  | Unused. Will be redone when payments are built                                                         |          |
+| `paid`               | Unused. Will be redone when payments are built                                                         |          |
+| `closed`             | Unused                                                                                                 | ✓        |
+| `cancelled`          | Unused; cancellation is not built                                                                      | ✓        |
+
+A cart that fails to parse never becomes an order. It stays an inbound exception in the review queue, and the dispatcher can only dismiss it ([05-email-intake](05-email-intake.md)). Dispatcher item editing is planned.
 
 ---
 
@@ -45,159 +53,110 @@ That gives us four things that would otherwise be scattered and eventually incon
 ```mermaid
 stateDiagram-v2
     direction TB
-    [*] --> received
-    received --> needs_review : parse failed
-    needs_review --> awaiting_customer : dispatcher resolves items
-    received --> awaiting_customer : checkout invite sent
-    awaiting_customer --> customer_confirmed : customer accepts
-    awaiting_customer --> customer_confirmed : dispatcher completes on behalf
-    customer_confirmed --> driver_requested : broadcast
+    [*] --> received : verified email, or dispatcher approves preview
+    received --> awaiting_customer : Send for approval
+    needs_review --> awaiting_customer : Send for approval
+    awaiting_customer --> needs_review : Undo send
+    awaiting_customer --> customer_confirmed : customer approves
+    customer_confirmed --> driver_requested : at once, same call
     driver_requested --> driver_assigned : first accept wins
     driver_assigned --> driver_at_store
     driver_at_store --> items_purchased
     items_purchased --> en_route
     en_route --> delivered
-    delivered --> payment_requested : payment link sent
-    payment_requested --> paid : Stripe webhook
-    paid --> closed
-    closed --> [*]
-    cancelled --> [*]
+    driver_assigned --> driver_requested : Release driver
+    driver_at_store --> driver_requested : Release driver
+    items_purchased --> driver_requested : Release driver
+    en_route --> driver_requested : Release driver
+    delivered --> [*]
 ```
 
 ---
 
 ## Transition table
 
-| #  | From                 | To                   | Actor      | Guard                                                   | Side effects                                                                                                             |
-| -- | -------------------- | -------------------- | ---------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| 1  | —                    | `received`           | system     | Parse validated against schema                          | Email → `parsed`; order number allocated; `order_received_ack` email to customer                                         |
-| 2  | —                    | `needs_review`       | system     | Both deterministic and LLM extraction failed validation | Email → `needs_review`; internal alert to dispatchers                                                                    |
-| 3  | `needs_review`       | `awaiting_customer`  | dispatcher | ≥1 item present; retailer store set                     | Email → `parsed`; `checkout_invite` email sent                                                                           |
-| 4  | `received`           | `awaiting_customer`  | dispatcher | ≥1 item present; retailer store set; fees entered       | `checkout_invite` email sent                                                                                             |
-| 5  | `awaiting_customer`  | `customer_confirmed` | customer   | Delivery address present; total > 0; items non-empty    | `customer_confirmed_at` set; `customer_confirmed` email                                                                  |
-| 6  | `awaiting_customer`  | `customer_confirmed` | dispatcher | Same as #5                                              | `confirmed_by_profile_id` **and** `customer_confirmed_at` set (records that a dispatcher acted on the customer's behalf) |
-| 7  | `customer_confirmed` | `driver_requested`   | dispatcher | Store set; driver pool non-empty                        | `job_broadcast` SMS to all active drivers; expiry timer scheduled                                                        |
-| 8  | `driver_requested`   | `driver_assigned`    | driver     | Order still `driver_requested`; no driver assigned      | `assigned_driver_id` set; `job_assigned` SMS to the winner; posting leaves every board                                   |
-| 9  | `driver_requested`   | `customer_confirmed` | dispatcher | No driver accepted                                      | Posting withdrawn from every board                                                                                       |
-| 10 | `driver_assigned`    | `driver_at_store`    | driver     | Caller is the assigned driver                           |                                                                                                                          |
-| 11 | `driver_at_store`    | `items_purchased`    | driver     | Caller is the assigned driver                           | Receipt photo **prompted**; if skipped, `skip_reason` required                                                           |
-| 12 | `items_purchased`    | `en_route`           | driver     | Caller is the assigned driver                           | `driver_en_route` email to customer                                                                                      |
-| 13 | `en_route`           | `delivered`          | driver     | Caller is the assigned driver                           | Delivery photo **prompted**; if skipped, `skip_reason` required                                                          |
-| 14 | `delivered`          | `payment_requested`  | dispatcher | Total > 0                                               | Stripe Payment Link created; `payment_request` email                                                                     |
-| 15 | `payment_requested`  | `paid`               | system     | Stripe webhook signature valid; amount matches          | `payments.status` → `paid`; `payment_received` email                                                                     |
-| 16 | `paid`               | `closed`             | system     | —                                                       |                                                                                                                          |
-| 17 | any non-terminal     | `cancelled`          | dispatcher | —                                                       | _(enum + transition defined; no UI in MVP)_                                                                              |
+| #  | From                              | To                   | Actor      | Guard                                                   | Side effects                                                                                       |
+| -- | --------------------------------- | -------------------- | ---------- | ------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| 1  | —                                 | `received`           | system     | `/mime` webhook: retailer DKIM verified, Lowe's cart parsed, known company or intent address | `finalize_inbound_cart` with no reviewer; event `source = 'email'`; inbound email → `parsed`; intent claimed |
+| 2  | —                                 | `received`           | dispatcher | Approving a validated Lowe's preview; active dispatcher; active company | `finalize_inbound_cart`; event `source = 'console'`; same writes as #1                             |
+| 3  | `received` / `needs_review`       | `awaiting_customer`  | dispatcher | Review gates pass: Items, Store, Address & contact, Size & price (sizing and mileage each ≥ $0.50). Checked in `canSendForApproval` (TypeScript) | Event "sent for approval — no email sent". The customer sees it in the portal                      |
+| 4  | `awaiting_customer`               | `needs_review`       | dispatcher | Customer has not approved yet                           | Event "send for approval undone"                                                                   |
+| 5  | `awaiting_customer`               | `customer_confirmed` | customer   | Caller is an active customer of the order's company; address, store, items present; total > 0; valid contact name and phone | Saves on-site contact and drop-off instructions; `customer_confirmed_at` set                       |
+| 6  | `customer_confirmed`              | `driver_requested`   | system     | Same call as #5                                         | Payout defaulted if unset (`default_driver_payout_cents`); event "Posted to drivers — no text sent" |
+| 7  | `driver_requested`                | `driver_assigned`    | driver     | Order still `driver_requested`; no driver assigned      | `assigned_driver_id` set; payout locked; job leaves Open jobs                                      |
+| 8  | `driver_assigned`                 | `driver_at_store`    | driver     | Caller is the assigned driver (or a dispatcher)         |                                                                                                    |
+| 9  | `driver_at_store`                 | `items_purchased`    | driver     | As #8; receipt photo in `evidence` **or** a skip reason | `attachments` row (`receipt`)                                                                      |
+| 10 | `items_purchased`                 | `en_route`           | driver     | As #8                                                   |                                                                                                    |
+| 11 | `en_route`                        | `delivered`          | driver     | As #8; delivery photo **or** a skip reason              | `attachments` row (`delivery`); the customer sees the photo                                        |
+| 12 | `driver_assigned` … `en_route`    | `driver_requested`   | dispatcher | Order is with a driver, not yet delivered               | `assigned_driver_id` cleared; payout unlocks; photos kept; same job link                           |
+
+Transitions 5 and 6 happen in one `approve_order` call and write two events, so the order is never left in `customer_confirmed`.
+
+### Not built
+
+- **Payment.** Decided 2026-11-18, not built: approving takes the customer to pay, and the order stays `awaiting_customer` until the payment clears. Only a cleared payment approves the order and posts it to drivers. `payment_requested`, `paid` and `closed` are unused today; the payment states will be redone when payments are built. See [09-payments](09-payments.md).
+- **Decline.** Planned for the pilot: a decline does not change status; when every driver has declined, the console flags "All drivers declined".
+- **Cancellation**, a dispatcher approving on the customer's behalf, and anything after `delivered`.
 
 ### Deliberate omissions
 
-- **No backwards transitions.** A driver cannot un-deliver. Corrections are made by a dispatcher advancing forward or cancelling.
-- **No automatic `delivered → payment_requested`.** The dispatcher triggers it, matching the current runbook. Automating it is a one-line change once the process is trusted.
-- **No transition out of `needs_review` directly to `received`.** Resolving review produces a valid order and moves to `awaiting_customer` — there is no useful state in between.
+- **No backwards driver steps.** `advance_job` only moves one step forward; a repeated tap that already landed is success. A wrong tap is corrected by a dispatcher advancing, or by Release driver.
+- **No transition out of `needs_review` to `received`.** Both are review states; Send for approval works from either.
 
 ---
 
 ## Traceability: old runbook statuses
 
-The low-tech process used Google Sheets status names. Every one maps to a state above, so nothing in the original runbook was lost in translation.
+The low-tech process used Google Sheets status names. Every one maps to a state above.
 
 | Runbook status             | New state            | Notes                                                                                        |
 | -------------------------- | -------------------- | -------------------------------------------------------------------------------------------- |
 | Received                   | `received`           |                                                                                              |
 | Delivery Address Requested | `awaiting_customer`  | Renamed — the state also covers item verification and price acceptance, not just the address |
-| _(implicit)_               | `customer_confirmed` | Made explicit. The runbook treated this as an email exchange with no status                  |
+| _(implicit)_               | `customer_confirmed` | Made explicit as an event. The runbook treated this as an email exchange with no status      |
 | Driver Requested           | `driver_requested`   |                                                                                              |
 | Driver Found               | `driver_assigned`    |                                                                                              |
 | Driver At Store            | `driver_at_store`    |                                                                                              |
 | Items Purchased            | `items_purchased`    |                                                                                              |
 | Driver En Route            | `en_route`           |                                                                                              |
 | Delivered                  | `delivered`          |                                                                                              |
-| Payment Requested          | `payment_requested`  |                                                                                              |
-| _(implicit)_               | `paid`               | Made explicit — previously a dispatcher had to notice the payment arrived                    |
-| Order Final                | `closed`             |                                                                                              |
-| —                          | `needs_review`       | New — parse failures now have a home                                                         |
-| —                          | `cancelled`          | New — defined but unused in MVP                                                              |
-
-Two states became explicit (`customer_confirmed`, `paid`) because both were previously tracked only in a human's head, and both are points where money or commitment changes hands.
+| Payment Requested          | `payment_requested`  | Unused; payment is planned at approval instead                                               |
+| _(implicit)_               | `paid`               | Unused; to be redone with payments                                                           |
+| Order Final                | `closed`             | Unused                                                                                       |
+| —                          | `needs_review`       | Used only after Undo send                                                                    |
+| —                          | `cancelled`          | Defined but unused                                                                           |
 
 ---
 
 ## Permission matrix
 
-| Transition                                 | Dispatcher | Driver | Customer | System |
-| ------------------------------------------ | ---------- | ------ | -------- | ------ |
-| → `received`                               |            |        |          | ✓      |
-| → `needs_review`                           |            |        |          | ✓      |
-| `needs_review` → `awaiting_customer`       | ✓          |        |          |        |
-| `received` → `awaiting_customer`           | ✓          |        |          |        |
-| `awaiting_customer` → `customer_confirmed` | ✓          |        | ✓        |        |
-| `customer_confirmed` → `driver_requested`  | ✓          |        |          |        |
-| `driver_requested` → `driver_assigned`     |            | ✓      |          |        |
-| `driver_requested` → `customer_confirmed`  | ✓          |        |          |        |
-| `driver_assigned` → `driver_at_store`      | ✓          | ✓      |          |        |
-| `driver_at_store` → `items_purchased`      | ✓          | ✓      |          |        |
-| `items_purchased` → `en_route`             | ✓          | ✓      |          |        |
-| `en_route` → `delivered`                   | ✓          | ✓      |          |        |
-| `delivered` → `payment_requested`          | ✓          |        |          |        |
-| `payment_requested` → `paid`               |            |        |          | ✓      |
-| `paid` → `closed`                          |            |        |          | ✓      |
-| → `cancelled`                              | ✓          |        |          |        |
+| Transition                                         | Dispatcher | Driver          | Customer | System |
+| -------------------------------------------------- | ---------- | --------------- | -------- | ------ |
+| → `received`                                       | ✓          |                 |          | ✓      |
+| `received` / `needs_review` → `awaiting_customer`  | ✓          |                 |          |        |
+| `awaiting_customer` → `needs_review`               | ✓          |                 |          |        |
+| `awaiting_customer` → `customer_confirmed` → `driver_requested` |  |          | ✓        |        |
+| `driver_requested` → `driver_assigned`             |            | ✓               |          |        |
+| `driver_assigned` → … → `delivered`                | ✓          | ✓ assigned only |          |        |
+| `driver_assigned` … `en_route` → `driver_requested` | ✓         |                 |          |        |
 
-Drivers may only ever act on **their own assigned order**. That check is part of the guard, not a separate authorisation layer.
+Drivers may only ever act on **their own assigned order**. `advance_job` checks that itself; it is not a separate authorisation layer.
 
 ---
 
 ## Invariants
 
-These must hold at all times. They are candidates for database constraints and test assertions.
+Enforced inside the functions above, not by database constraints, unless noted. The numbers are stable: migration comments cite them (`approve_order` cites 1, 4 and 7), so a retired invariant keeps its number.
 
-1. `status = 'customer_confirmed'` implies `delivery_address IS NOT NULL` and `total_cents > 0`.
-2. `status` in (`driver_assigned`, `driver_at_store`, `items_purchased`, `en_route`, `delivered`) implies `assigned_driver_id IS NOT NULL`.
-3. `status = 'paid'` implies a `payments` row with `status = 'paid'`.
-4. `retailer_store_id IS NOT NULL` for every status at or past `awaiting_customer`.
-5. A driver declines a given order at most once (`job_declines` unique on (`order_id`, `driver_id`)).
-6. Every order has exactly one `order_status_events` row with `from_status IS NULL` — its creation.
-7. `order_items` is non-empty for any status at or past `awaiting_customer`.
-
----
-
-## `transitionOrder()` contract
-
-```ts
-type TransitionInput = {
-  orderId: string;
-  to: OrderStatus;
-  actor: {
-    profileId: string | null;
-    role: UserRole | "system";
-    source: EventSource;
-  };
-  note?: string;
-  metadata?: Record<string, unknown>;
-};
-
-type TransitionResult =
-  | { ok: true; order: Order; event: OrderStatusEvent }
-  | {
-      ok: false;
-      reason:
-        | "illegal_transition"
-        | "guard_failed"
-        | "not_authorised"
-        | "stale_state";
-      detail: string;
-    };
-```
-
-Behaviour:
-
-1. **Load the order `FOR UPDATE`** and re-check the current status. Two concurrent transitions must not both succeed.
-2. Look up the transition in the map. Reject `illegal_transition` if absent.
-3. Check the actor's role against the matrix. Reject `not_authorised`.
-4. Evaluate guards. Reject `guard_failed` with a specific detail.
-5. Update `orders`, write the `order_status_events` row, and apply side-effect _intent_ in **one transaction**.
-6. Enqueue the side effect (a `notifications` outbox row) **after commit**, then attempt delivery. A notification that fails is retried by the sweep; a notification sent for a rolled-back transaction is a lie.
-
-Step 6 is the subtle one: side effects must be triggered by a committed event, never by the in-transaction code path.
+1. An order at or past `driver_requested` had a delivery address, a store, at least one item and `total_cents > 0` when it was approved (`approve_order`).
+2. `status` in (`driver_assigned`, `driver_at_store`, `items_purchased`, `en_route`) implies `assigned_driver_id IS NOT NULL`. `accept_job` sets both together; `release_driver` clears both together. (`delivered` also keeps the driver.)
+3. _Retired until payments are built:_ `status = 'paid'` implies a paid `payments` row. Pay on approval will replace it ([09-payments](09-payments.md)).
+4. `retailer_store_id IS NOT NULL` for every status at or past `awaiting_customer` (Send gate and `approve_order`).
+5. A driver declines a given order at most once — a unique constraint on `job_declines` (`order_id`, `driver_id`).
+6. Every order created by `finalize_inbound_cart` has exactly one `order_status_events` row with `from_status IS NULL` — its creation.
+7. `order_items` is non-empty for every order: `finalize_inbound_cart` requires 1–100 items.
+8. `driver_payout_cents` does not change once a driver has accepted (`set_driver_payout`), until a release.
+9. Items purchased and Delivered each have an `attachments` row with a file or a skip reason (`advance_job`; the file-or-reason check is a table constraint).
 
 ---
 
@@ -205,8 +164,10 @@ Step 6 is the subtle one: side effects must be triggered by a committed event, n
 
 | Situation                       | Behaviour                                                                                                                                    |
 | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| Illegal transition attempted    | Reject; log at `warn`; no state change                                                                                                       |
-| Guard fails (e.g. no store set) | Reject with a specific, user-facing reason — the console shows "Set a store first", not "invalid transition"                                 |
-| Concurrent transition           | Second caller gets `stale_state`; the UI refreshes and shows the new state                                                                   |
-| Side-effect enqueue fails       | The status change stands (it is already committed); the outbox sweep retries the send, and `notifications.dedupe_key` prevents a double-send |
-| Stripe webhook arrives twice    | `payments.stripe_session_id` is unique; the second insert is ignored and the transition is a no-op                                           |
+| Wrong status for the transition | The function raises an error; no state change. The console shows an error in the bottom bar                                                 |
+| Review gate unresolved          | Send for approval refuses; clicking Send scrolls to and highlights what is missing                                                           |
+| Two dispatchers send at once    | The update is conditional on the status, so it moves once and records one event                                                              |
+| Undo send races the customer    | Conditional on `awaiting_customer`: whichever lands first wins; the dispatcher sees an error if the customer approved first                  |
+| Two drivers accept at once      | The conditional update serialises on the row; one gets `accepted`, the other `taken`                                                         |
+| Driver step recorded twice      | A repeated `advance_job` to the current status returns success                                                                               |
+| Photo uploaded but step fails   | The driver app may delete its own unrecorded upload (`evidence_driver_delete`, `0018`)                                                       |

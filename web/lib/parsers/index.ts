@@ -61,8 +61,8 @@ export type CartParseOutcome =
 /**
  * Select a parser, run it, and hold the result to the shared schema and checks.
  *
- * A failure here is a `needs_review` order, not an exception: the dispatcher
- * resolves it, and the reason is recorded so drift is visible.
+ * A failure here never becomes an order: the email waits in the dispatcher's
+ * inbound review with the reason recorded, so drift is visible.
  */
 export function parseCart(input: ParseInput): CartParseOutcome {
   const parser = selectParser(input.senderEmail);

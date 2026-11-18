@@ -1,8 +1,8 @@
 # 07 — Dispatch
 
-Posting a confirmed order to drivers and resolving the race when several accept.
+Posting an approved order to drivers and resolving the race when several accept.
 
-> **Status:** Planned design. Not yet implemented. See [04-order-lifecycle](04-order-lifecycle.md) for the transition this drives.
+> **Status (2026-11-18):** Built: automatic posting when the customer approves, the job board, posting details, first-accept-wins (`accept_job`), Release driver, and receipt and delivery photos. Not built: Decline (planned for the pilot), push notifications (planned), texts (later), and the expiry sweep. See [04-order-lifecycle](04-order-lifecycle.md) for the transitions.
 
 ---
 
@@ -10,25 +10,25 @@ Posting a confirmed order to drivers and resolving the race when several accept.
 
 ```mermaid
 sequenceDiagram
+    participant C as Customer
     participant D as Dispatcher
-    participant App as Next.js
     participant DB as Postgres
-    participant TW as Twilio
     participant Dr as Drivers
 
-    D->>DB: transition to driver_requested
-    App->>TW: job_broadcast SMS to each active driver
-    TW-->>Dr: "Job available — tap to view"
+    C->>DB: approve_order()
+    DB->>DB: awaiting_customer → customer_confirmed → driver_requested
+    Note over DB: the order is now posted
 
-    Note over Dr,DB: drivers open the board and tap Accept
+    D->>Dr: "Copy job link" in the console, sent by hand
+    Note over D,Dr: no push or text yet
 
-    Dr->>DB: transitionOrder(-> driver_assigned)
+    Dr->>DB: get_job_posting() — payout, store, address, items, vehicle
+    Dr->>DB: accept_job()
     DB->>DB: atomic claim (see below)
-    DB-->>Dr: success to exactly one caller
-    App->>TW: job_assigned SMS to the winner
-
-    Note over DB,App: a cron sweep flags postings older than the TTL
+    DB-->>Dr: 'accepted' to exactly one caller, 'taken' to the rest
 ```
+
+Posting happens the moment the customer approves; the dispatcher does not post by hand. **Planned:** once payment at approval is built, posting happens when the payment clears instead (decided 2026-11-18). Push to drivers on a new job is planned; texts come later.
 
 ---
 
@@ -38,7 +38,7 @@ A `driver_requested` order **is** the posting. Every active driver sees every op
 
 This is a deliberate simplification for the MVP's scale (a handful of companies, a few drivers):
 
-- The board is a query over `orders` in `driver_requested`, not a table of offers.
+- The board is a query over `orders` in `driver_requested` (`get_open_jobs_for_driver()`, open to drivers and dispatchers), not a table of offers.
 - The only dispatch state that matters — who has the job — lives in one place: `orders.assigned_driver_id`.
 - The one per-driver fact worth keeping is a decline, recorded as a plain row ([below](#declines)) rather than as a status.
 
@@ -46,15 +46,22 @@ If targeted dispatch (per-driver offers, geographic or vehicle filtering) is eve
 
 ---
 
+## What a driver sees
+
+| When              | What the posting shows                                                                 |
+| ----------------- | -------------------------------------------------------------------------------------- |
+| Before accepting  | Payout, store, the full delivery address, items, and the vehicle needed (Car or Truck) |
+| After accepting   | Also the on-site contact (name and phone) and drop-off instructions                    |
+
+`get_job_posting()` returns the posting; drivers cannot select an order directly until they have accepted it.
+
+The Jobs page lists **In progress**, **Open jobs** and **Delivered**.
+
+---
+
 ## Eligibility
 
-A driver is alerted about a posting when all hold:
-
-| Condition                  | Source                                                                          |
-| -------------------------- | ------------------------------------------------------------------------------- |
-| `profiles.role = 'driver'` |                                                                                 |
-| `profiles.active = true`   |                                                                                 |
-| Has a phone number         | Required for SMS; a driver with no phone still sees the board but gets no alert |
+Every active driver (`profiles.role = 'driver'` and `profiles.active = true`) sees every open posting. Nobody is alerted today; the dispatcher sends the job link by hand. **Planned:** a push notification to every driver with notifications turned on.
 
 The MVP has a single market (Greenville/Spartanburg, SC), so there is no geographic filtering. When a second market is added, an eligibility predicate on `retailer_stores` location is the natural extension point.
 
@@ -64,9 +71,7 @@ The MVP has a single market (Greenville/Spartanburg, SC), so there is no geograp
 
 This is the only genuine concurrency hazard in the system, and it is settled by the state transition itself.
 
-Acceptance is the `driver_requested → driver_assigned` transition. `transitionOrder()` already loads the order `FOR UPDATE` and re-checks the current status inside the transaction, so two concurrent accepts serialise on the order row: the second reads `driver_assigned`, finds no legal transition, and is rejected with a clean "already taken" message. There is no second write path and no separate claim function.
-
-Equivalently, the whole claim is one conditional statement:
+Acceptance is the `driver_requested → driver_assigned` transition, done by `accept_job()`. The whole claim is one conditional statement:
 
 ```sql
 update orders
@@ -77,17 +82,17 @@ update orders
 returning id;
 ```
 
-Postgres re-evaluates the predicate after the row lock is released, so the loser matches zero rows. Application-level checks (`SELECT` then `UPDATE`) are not sufficient — the guard lives in the transition.
+Postgres re-evaluates the predicate after the row lock is released, so the loser matches zero rows and gets `'taken'`. Application-level checks (`SELECT` then `UPDATE`) are not sufficient — the guard lives in the function.
 
-The `driver_requested → driver_assigned` transition is the **only** writer of `orders.assigned_driver_id`.
+`accept_job()` is the only code that sets `orders.assigned_driver_id`; `release_driver()` clears it.
 
-Guard: the caller is a driver, the order is `driver_requested`, and no driver is assigned. A retried Accept from the winner (double-tap, network retry) is treated as success rather than an error.
+Guard: the caller is an active driver, the order is `driver_requested`, and no driver is assigned. A retried Accept from the winner (double-tap, network retry) returns `'accepted'` rather than an error. The payout is locked once a driver accepts.
 
 ---
 
 ## Declines
 
-A driver who cannot take a posting taps **Decline**, which inserts one row:
+**Not built.** The `job_declines` table exists, but nothing writes to it yet. Planned for the pilot (decided 2026-11-18): a **Decline** button on the driver's job page that inserts one row:
 
 ```
 job_declines
@@ -96,9 +101,8 @@ job_declines
 ```
 
 - A decline does not change the order's status and does not affect other drivers.
-- The dispatcher is notified of each decline and sees who declined on the order.
-- The posting disappears from that driver's board — `get_open_jobs_for_driver()` excludes orders the caller has declined.
-- When every active driver has declined, the order is flagged **nobody available** in the console. That is the escalation signal: a human needs to widen the pool or call around.
+- The posting disappears from that driver's board — `get_open_jobs_for_driver()` already excludes orders the caller has declined.
+- When every active driver has declined, the order moves to the top of the dispatcher's **Finding driver** tab, marked **All drivers declined**. Once push exists, dispatchers also get a notification. The dispatcher handles it from there, by calling a driver or the customer.
 
 A decline has no concurrency hazard — the insert is idempotent via the unique constraint.
 
@@ -106,22 +110,26 @@ A decline has no concurrency hazard — the insert is idempotent via the unique 
 
 ## Broadcast expiry
 
-A cron sweep runs every few minutes and looks for orders still `driver_requested` past the broadcast TTL. It notifies the dispatcher once per order — through the notification outbox, so `dedupe_key` prevents repeats — including who has declined.
-
-The dispatcher can then re-broadcast (transition `driver_requested → customer_confirmed → driver_requested`) or widen the pool. The MVP does **not** auto-rebroadcast — an unfilled order is a signal a human should see.
+**Not built** (there are no cron jobs). The design: a sweep looks for orders still `driver_requested` past a time limit and warns the dispatcher once per order. The MVP does **not** auto-rebroadcast — an unfilled order is a signal a human should see. This longer "sat unaccepted too long" warning is separate from the planned All drivers declined flag.
 
 ---
 
 ## Withdrawal and reassignment
 
-| Action                             | Effect                                                                                          |
-| ---------------------------------- | ----------------------------------------------------------------------------------------------- |
-| Driver declines                    | A `job_declines` row. The order stays `driver_requested`; other drivers are unaffected          |
-| Dispatcher withdraws the broadcast | Order returns to `customer_confirmed`; the posting leaves every board                           |
-| Order cancelled                    | The posting leaves every board                                                                  |
-| Assigned driver falls through      | Dispatcher clears the assignment, returns the order to `customer_confirmed`, then re-broadcasts |
+| Action                             | Effect                                                                                          | Status |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------- | ------ |
+| Assigned driver falls through      | Dispatcher clicks **Release driver** (`release_driver()`) at any step before delivery. The order returns to `driver_requested` and is posted again; photos already taken stay, and the payout unlocks | Built |
+| Driver declines                    | A `job_declines` row. The order stays `driver_requested`; other drivers are unaffected          | Planned for the pilot |
+| Dispatcher withdraws the posting   | The posting leaves every board                                                                  | Not built |
+| Order cancelled                    | The posting leaves every board                                                                  | Not built |
 
-Every one of these is recorded in `order_status_events`. There is no separate offer record to reconcile.
+Status changes are recorded in `order_status_events`; a release records the released driver. There is no separate offer record to reconcile.
+
+---
+
+## After accepting
+
+The driver moves the job forward one step at a time with `advance_job()` (forward only): **I'm at the store** → **Items purchased** (receipt photo, or skip with a reason) → **On my way** → **Delivered** (delivery photo, or skip with a reason). Photos upload from the phone straight to the private `evidence` bucket. The dispatcher sees each step's time, the photos and any skip reason; the customer sees delivery progress and the delivery photo only. `delivered` is the last step today.
 
 ---
 

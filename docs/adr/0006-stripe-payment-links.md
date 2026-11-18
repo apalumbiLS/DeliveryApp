@@ -1,6 +1,6 @@
 # ADR-0006: Stripe Payment Links for collection
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR-0011](0011-pay-on-approval.md) — the customer now pays at approval, not after delivery.
 - **Date:** 2026-09-16
 - **Deciders:** Delivery App team
 

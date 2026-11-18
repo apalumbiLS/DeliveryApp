@@ -2,7 +2,7 @@
 
 Identity, route guards, and the Row Level Security policies that enforce access.
 
-> **Status:** Partly implemented. The sign-in flow and the customer portal guard are live; the dispatcher and driver consoles are not built. RLS policies ship in the same migration as their tables.
+> **Status:** Built. Sign-in and all four consoles exist: dispatch (`/dispatch`), driver (`/driver`), admin (`/admin`) and the customer portal (`/portal`). Migrations `0001`–`0018` are applied. RLS policies ship in the same migration as their tables. Password change and reset are not built.
 
 ---
 
@@ -42,17 +42,17 @@ A fourth concept — **admin** — is not a role. Dispatchers hold administrativ
 
 | Route group       | Required role             | Behaviour on failure |
 | ----------------- | ------------------------- | -------------------- |
-| `/dispatch/*`     | `dispatcher`              | Redirect to `/login` |
-| `/driver/*`       | `driver`                  | Redirect to `/login` |
-| `/portal/*`       | `customer`                | Redirect to `/login` |
-| `/admin/*`        | `dispatcher`              | Redirect to `/portal` |
+| `/dispatch/*`     | `dispatcher`              | No session → `/login`; other role → `/` |
+| `/driver/*`       | `driver` (a dispatcher may view) | No session → `/login`; other role → `/` |
+| `/portal/*`       | `customer`                | No session → `/login`; dispatcher → `/admin`; driver → `/driver` |
+| `/admin/*`        | `dispatcher`              | No session → `/login`; other role → `/portal` |
 | `/login`          | none                      | —                    |
 | `/request-access` | none                      | —                    |
 | `/api/webhooks/*` | none — signature-verified | `400` / `406`        |
 
 Route guards are a **UX affordance, not a security boundary**. They stop a driver from seeing a dispatcher page; they do not protect data. RLS does that, and it holds even if a guard is bypassed or a route is added without one.
 
-Middleware reads the role from the JWT claim and redirects cross-role access to the correct home for that role rather than to a dead end.
+The role is read from `profiles`, not from the JWT. Each console's layout or `require*` helper checks it on the server.
 
 ### As built
 
@@ -65,6 +65,8 @@ Middleware reads the role from the JWT claim and redirects cross-role access to 
 | Sign-in screen                         | `web/app/(auth)/login/`                        |
 | Access request (no self-signup)        | `web/app/(auth)/request-access/`               |
 | Customer guard and chrome              | `web/app/portal/layout.tsx`                    |
+| Dispatcher guard (dispatch + admin)    | `web/app/(console)/layout.tsx`, `web/lib/dispatch/require-dispatcher.ts` |
+| Driver guard                           | `web/app/driver/layout.tsx`, `web/lib/driver/require-driver.ts` |
 | Start-an-order flow (writes an intent) | `web/app/portal/start/`                        |
 | Customer mutation guard                | `web/lib/portal/require-customer.ts`           |
 | Admin guard and directory              | `web/app/(console)/admin/`                               |
@@ -74,7 +76,7 @@ Middleware reads the role from the JWT claim and redirects cross-role access to 
 
 Only the first dispatcher is created by hand, in the dashboard — the console cannot promote anyone until a dispatcher exists. Every account after that is created from `/admin`, which also assigns role and company and deactivates. Deactivation is `profiles.active = false`, the same mechanism as the RLS helpers check.
 
-The proxy answers only "is there a session?" via `getClaims()`. The portal layout enforces the role, and RLS enforces the data. A signed-in non-customer sees a notice rather than a redirect, so no login↔portal loop can form while the other consoles are unbuilt.
+The proxy answers only "is there a session?" via `getClaims()`, for `/portal`, `/admin` and `/driver`. Each console's layout enforces the role, and RLS enforces the data. The portal sends a dispatcher to `/admin` and a driver to `/driver`; any other signed-in user without a usable profile sees a notice.
 
 ---
 
@@ -89,21 +91,21 @@ sequenceDiagram
     participant SA as Supabase Auth
     participant DB as Postgres
 
-    D->>App: create company + portal user
-    App->>DB: insert companies (order_alias)
-    App->>SA: admin.createUser(email, password)
+    Note over D,DB: The company already exists (created in SQL; no screen)
+    D->>App: create user (email, password, role, company)
+    App->>SA: admin.createUser(email, password, email_confirm)
     SA-->>App: user id
-    App->>DB: insert profiles (role=customer, company_id)
-    App->>D: show alias + credentials for handoff
+    App->>DB: insert profiles (role, company_id)
+    App->>D: user appears in the directory; hand over credentials
 ```
 
 | Role         | Provisioning                                                                                              |
 | ------------ | --------------------------------------------------------------------------------------------------------- |
-| `customer`   | Dispatcher creates the company, then one portal login. Credentials are handed over out-of-band in the MVP |
-| `driver`     | Dispatcher creates the account; driver can change their password after first login                        |
-| `dispatcher` | Created manually via the Supabase dashboard. There is no in-app path to create a dispatcher               |
+| `customer`   | The company is created in SQL (there is no company screen). A dispatcher then creates the portal login in `/admin`. Credentials are handed over out-of-band |
+| `driver`     | Dispatcher creates the account in `/admin`. No password change yet (planned: a change-password page and an admin "set new password") |
+| `dispatcher` | The first one is created by hand in the Supabase dashboard. After that, any dispatcher can create another, or change a user's role to dispatcher, from `/admin` |
 
-The absence of an in-app dispatcher-creation path is deliberate: it is the one account type that can see everything, and it should require direct database access to create.
+Dispatchers can see everything, so creating one is limited to existing dispatchers. In-app creation was allowed on 2026-11-18 because the pilot needs more than one dispatcher and the dashboard is a clumsy place to manage them. A dispatcher cannot change their own role or deactivate themselves, so the console cannot lock out its last admin by accident.
 
 ---
 
@@ -194,23 +196,30 @@ create policy orders_driver on orders for select using (
 );
 ```
 
-**Drivers deliberately cannot select `orders` for postings they have not accepted.** A posting must show the store and the item count — a driver deciding whether to accept needs to know what they're taking on — but must **not** reveal the customer's address, contact, or instructions before they commit.
+**Drivers deliberately cannot select `orders` for postings they have not accepted.** A posting must show enough to decide — store, address, items, payout — but must **not** reveal the customer's on-site contact or drop-off instructions before they commit.
 
 That is served by a redacted read path instead:
 
 ```sql
+-- As replaced in 0015_open_jobs_role_check.sql.
 create or replace function public.get_open_jobs_for_driver()
 returns table (
-  order_id uuid, order_number text, retailer retailer,
-  store_name text, store_address text, item_count int, posted_at timestamptz
+  order_id uuid,
+  order_number text,
+  retailer retailer,
+  store_name text,
+  store_address text,
+  item_count int,
+  posted_at timestamptz
 )
 language sql security definer stable set search_path = public as $$
   select ord.id, ord.order_number, ord.retailer,
-         s.name, s.address_line1, count(i.id), ord.updated_at
+         s.name, s.address_line1, count(i.id)::int, ord.updated_at
     from orders ord
     left join retailer_stores s on s.id = ord.retailer_store_id
     left join order_items i on i.order_id = ord.id
    where ord.status = 'driver_requested'
+     and (public.is_driver() or public.is_dispatcher())
      and not exists (
        select 1 from job_declines d
         where d.order_id = ord.id and d.driver_id = auth.uid()
@@ -219,7 +228,9 @@ language sql security definer stable set search_path = public as $$
 $$;
 ```
 
-The delivery address appears only after assignment, through the normal `orders` policy. **Redaction is structural, not a UI concern** — the address is not in the function's return type at all.
+The baseline version had no role check, so any signed-in user could list open jobs; `0015` added it.
+
+The job link uses `get_job_posting(order_id)` (`0014`, recreated in `0016`), also `security definer`. Before accepting, a driver sees the payout, store, **full delivery address**, items and vehicle size — the pilot's drivers are known and trusted, and a town alone was too broad to decide on. The on-site contact and drop-off notes are **not** in its return type; the driver reads them only after accepting, through the normal `orders` policy. **Redaction is structural, not a UI concern.**
 
 ### Order children
 
@@ -231,7 +242,15 @@ create policy order_items_read on order_items for select using (
 );
 ```
 
-The subquery is itself subject to the `orders` policies, so visibility composes correctly for all three roles without restating the rules.
+The subquery is itself subject to the `orders` policies, so visibility composes correctly for all three roles without restating the rules. `attachments` adds one rule (`0013`): customers see only `delivery` photos, never the receipt.
+
+```sql
+create policy attachments_read on attachments for select
+  using (
+    exists (select 1 from orders o where o.id = attachments.order_id)
+    and (kind = 'delivery' or is_dispatcher() or is_driver())
+  );
+```
 
 ### Order intents
 
@@ -264,7 +283,82 @@ create policy job_declines_read on job_declines for select using (
 );
 ```
 
-Drivers may insert and read only their own declines. Acceptance is not writable at all: it is the `driver_requested → driver_assigned` transition, and drivers hold no write policy on `orders`, so an assignment cannot be fabricated by writing rows directly.
+Drivers may insert and read only their own declines (Decline has no screen yet; planned for the pilot). Drivers hold no write policy on `orders`, so an assignment cannot be fabricated by writing rows directly.
+
+### Driver functions
+
+Every driver write goes through a `security definer` function that checks the caller itself (`0013`, `0014`):
+
+| Function | Who | Check |
+| --- | --- | --- |
+| `accept_job(order_id)` | Active driver | Conditional update from `driver_requested` with no driver; first accept wins; returns `accepted` or `taken` |
+| `advance_job(order_id, to_status, …)` | The assigned driver, or a dispatcher | One step forward only; Items purchased and Delivered need a photo in `evidence` or a skip reason |
+| `get_job_posting(order_id)` | Driver or dispatcher | Returns nothing unless the order is posted, is the caller's, or the caller is a dispatcher |
+| `release_driver(order_id)` | Dispatcher (`security invoker`) | Order is with a driver and not delivered |
+
+The customer's one write, `approve_order`, works the same way: `security definer`, and it checks that the caller is an active customer of the order's company.
+
+### Evidence storage
+
+Receipt and delivery photos live in the private Storage bucket `evidence`, under `<order id>/`. Policies on `storage.objects`:
+
+```sql
+-- 0013: the assigned driver uploads while at a photo step.
+create policy evidence_driver_insert on storage.objects for insert
+  to authenticated
+  with check (
+    bucket_id = 'evidence'
+    and exists (
+      select 1 from public.orders o
+       where o.id::text = (storage.foldername(name))[1]
+         and o.assigned_driver_id = auth.uid()
+         and o.status in ('driver_at_store', 'en_route')
+         and public.is_driver()
+    )
+  );
+
+-- 0013: dispatchers do anything in the bucket.
+create policy evidence_dispatcher on storage.objects for all
+  to authenticated
+  using (bucket_id = 'evidence' and public.is_dispatcher())
+  with check (bucket_id = 'evidence' and public.is_dispatcher());
+
+-- 0013: whoever may read the attachments row may read its file; the
+-- assigned driver also reads uploads on their job.
+create policy evidence_read on storage.objects for select
+  to authenticated
+  using (
+    bucket_id = 'evidence'
+    and (
+      exists (select 1 from public.attachments a
+               where a.storage_path = storage.objects.name)
+      or exists (select 1 from public.orders o
+                  where o.id::text = (storage.foldername(name))[1]
+                    and o.assigned_driver_id = auth.uid()
+                    and public.is_driver())
+    )
+  );
+
+-- 0018: the uploader may delete a file no attachments row points at,
+-- while still at a photo step on that job.
+create policy evidence_driver_delete on storage.objects for delete
+  to authenticated
+  using (
+    bucket_id = 'evidence'
+    and owner_id = auth.uid()::text
+    and exists (
+      select 1 from public.orders o
+       where o.id::text = (storage.foldername(name))[1]
+         and o.assigned_driver_id = auth.uid()
+         and o.status in ('driver_at_store', 'en_route')
+         and public.is_driver()
+    )
+    and not exists (select 1 from public.attachments a
+                     where a.storage_path = storage.objects.name)
+  );
+```
+
+Photos are shown through `/dispatch/photo/[id]` and `/portal/photo/[id]`, which use the signed-in user's client (RLS applies) and sign a fresh short-lived URL per request.
 
 ### Notifications, payments, inbound email
 
@@ -292,19 +386,21 @@ create policy inbound_emails_dispatcher on inbound_emails for all
 
 ## Service role usage
 
-The secret key (`sb_secret_...`, formerly the `service_role` key) bypasses RLS entirely. It appears in exactly three places:
+The secret key (`sb_secret_...`, formerly the `service_role` key) bypasses RLS entirely. `createAdminClient()` (`web/lib/supabase/admin.ts`) is called in exactly these places:
 
 | Location                                                 | Why                                                                      |
 | -------------------------------------------------------- | ------------------------------------------------------------------------ |
-| Webhook route handlers (Mailgun, Stripe)                 | No user context exists; the caller is a provider                         |
-| Cron sweep routes (`/api/cron/*`)                        | Scheduled work runs with no session; protected by a shared-secret header |
-| Admin console (`/admin`) — creating a user, listing accounts | The Supabase admin API (`auth.admin.*`) requires it; every call follows `requireAdmin()` |
+| `web/app/api/webhooks/mailgun/inbound/route.ts`, `web/app/api/webhooks/mailgun/mime/route.ts` | No user context exists; the caller is Mailgun, verified by HMAC signature. Records the email and, for a verified `/mime` cart, calls `finalize_inbound_cart` |
+| `web/lib/admin/users.ts` — `listDirectory` (`auth.admin.listUsers`) and `createPortalUser` (`auth.admin.createUser`, and `deleteUser` if the profile insert fails) | The Supabase admin API requires it; every caller runs `requireAdmin()` first |
+| `web/lib/dispatch/actions.ts` — `approveInboundEmail` | `finalize_inbound_cart` is granted to `service_role` only; the action runs `requireDispatcher()` first and passes the dispatcher as reviewer |
+
+There are no Stripe webhooks or cron routes yet.
 
 Rules that keep this safe:
 
-1. The service role client lives in `lib/supabase/admin.ts` and is **never** imported into a client component or a route group — route-group code reaches it through `lib/admin/*` instead.
+1. The service role client lives in `lib/supabase/admin.ts` and is **never** imported into a client component. It throws if it runs in the browser.
 2. Server actions that use it must independently verify the caller's role first — RLS will not do it for them.
-3. Every service-role code path is listed above. Adding a fourth requires updating this document.
+3. Every service-role code path is listed above. Adding another requires updating this document.
 
 The risk is concrete: a server action that uses the service role and forgets to check the caller's role is a full data breach. That is why the list is short and enumerated.
 
@@ -317,20 +413,23 @@ The risk is concrete: a server action that uses the service role and forgets to 
 | View all orders                        | ✓          |                  |            |
 | View own company's orders              |            |                  | ✓          |
 | View assigned job                      | ✓          | ✓                |            |
-| View an open posting (unaccepted)      | ✓          | ✓ redacted       |            |
-| See delivery address                   | ✓          | after assignment | own orders |
-| Edit order items                       | ✓          |                  |            |
-| Set retailer store                     | ✓          |                  |            |
-| Set fees                               | ✓          |                  |            |
-| Complete checkout on customer's behalf | ✓          |                  |            |
-| Complete own checkout                  |            |                  | ✓          |
-| Broadcast to drivers                   | ✓          |                  |            |
+| View an open posting (unaccepted)      | ✓          | ✓ no contact or drop-off notes |  |
+| See delivery address                   | ✓          | on the posting   | own orders |
+| See on-site contact and drop-off notes | ✓          | after accepting  | own orders |
+| Edit order items                       | planned    |                  |            |
+| Set store, address, size and fees      | ✓          |                  |            |
+| Set driver payout (until accepted)     | ✓          |                  |            |
+| Send for approval / Undo send          | ✓          |                  |            |
+| Approve own order (posts it to drivers) |           |                  | ✓          |
 | Accept a job                           |            | ✓                |            |
-| Decline a posting                      |            | ✓                |            |
+| Decline a posting                      |            | planned          |            |
 | Advance delivery status                | ✓          | ✓ assigned only  |            |
-| Upload evidence                        | ✓          | ✓ assigned only  |            |
-| Send payment request                   | ✓          |                  |            |
-| Create companies, users, stores        | ✓          |                  |            |
+| Upload evidence                        | ✓          | ✓ assigned, at a photo step |  |
+| Release a driver                       | ✓          |                  |            |
+| See delivery photo                     | ✓          | ✓ own job        | own orders |
+| See receipt photo                      | ✓          | ✓ own job        |            |
+| Create users, change role/company, deactivate | ✓   |                  |            |
+| Create companies                       | SQL only   |                  |            |
 | Read inbound email                     | ✓          |                  |            |
 
 ---
@@ -341,7 +440,7 @@ The risk is concrete: a server action that uses the service role and forgets to 
 | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | Session storage      | HTTP-only, `Secure`, `SameSite=Lax` cookie set by Supabase                                                                                     |
 | Refresh              | Middleware refreshes on navigation                                                                                                             |
-| Password reset       | Supabase's email reset flow, using Mailgun as the SMTP provider                                                                                |
+| Password reset       | Not built. Planned: a change-password page and an admin "set new password"                                                                   |
 | Password policy      | Minimum length enforced by Supabase; no forced rotation                                                                                        |
 | Account deactivation | `profiles.active = false` — the helper functions all check it, so a deactivated user loses access immediately while their history is preserved |
 | Deleted users        | Never deleted. `active = false` preserves order history and audit integrity                                                                    |

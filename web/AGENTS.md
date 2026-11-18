@@ -46,6 +46,6 @@ Schema lives at the **repo root** in `supabase/`, not in this directory.
 - Every schema change after it is a **new numbered file**: `0002_<change>.sql`, `0003_<change>.sql`. **Never edit a migration that has been applied anywhere** — environments diverge silently and the repo can't tell you which has the change.
 - RLS policies ship in the same migration as the table they protect, never as a follow-up.
 - The base script is deliberately **not idempotent**. Re-running it fails on the first `create type`; that is the intended signal that migration state was lost track of.
-- Seed data (idempotent, applied after migrations — never as part of them) goes in `supabase/seed/`. There is none yet.
+- Seed data (idempotent, applied after migrations — never as part of them) goes in `supabase/seed/`: `0001_dev.sql` (development data), `0002_zip_centroids.sql` (NC and SC ZIP centroids) and `0003_sc_stores.sql` (South Carolina Lowe's stores).
 - Apply by hand in the Supabase SQL editor, in filename order, or with `supabase link --project-ref <ref> && supabase db push`.
 - Conventions: `docs/architecture/03-data-model.md#migrations`. Policy detail: `docs/architecture/10-auth-and-permissions.md`.

@@ -2,7 +2,7 @@
 
 Who uses the system, what it depends on, and what crosses the boundary.
 
-> **Status:** Planned design. Not yet implemented. See [00-overview](00-overview.md) for locked decisions and roadmap.
+> **Status:** Supabase, Vercel and Mailgun inbound are in use. Web Push and payments are decided but not built; Twilio texts, outbound email and the LLM fallback come later (2026-11-18). See [00-overview](00-overview.md) for locked decisions and roadmap.
 
 ---
 
@@ -30,10 +30,11 @@ A fourth role — **Admin** — exists in the permission model but is not a sepa
 |----------------------|------------------------------------------------------------|---------|------------------------------------------------------------------------|
 | **Home Depot website** | Where the customer builds and shares the cart                | Out only  | None — we never call Home Depot                                          |
 | **Lowe's website**     | Same                                                         | Out only  | None                                                                     |
-| **Mailgun**            | Receives inbound cart emails; sends outbound customer email  | In + Out  | Inbound: raw MIME cart email. Outbound: transactional email to customers |
-| **Twilio**             | SMS notifications to drivers                                 | Out       | Driver phone number, short job summary                                   |
-| **Stripe**             | Collects payment                                             | Out + In  | Out: order total, description. In: `checkout.session.completed` webhook  |
-| **LLM provider**       | Fallback cart extraction when the deterministic parser fails | Out       | Outbound: sanitized email HTML. Inbound: structured JSON                 |
+| **Mailgun**            | Receives inbound cart emails. Outbound customer email later  | In (+ Out later) | Inbound: parsed fields, or the raw MIME message on the `/mime` route |
+| **Web Push** (planned) | First channel to drivers, customers and dispatchers, through the browser's push service to the home-screen app. Decided 2026-11-18, not built | Out | Short job or order message and a link into the app |
+| **Twilio** (later)     | Texts as a fallback for anyone whose push stops working. Not built | Out | Phone number, short job summary                                   |
+| **Payment processor** (planned) | Collects payment when the customer approves. Decided 2026-11-18, not built; account being set up | Out + In | Out: order total. In: signed payment webhook |
+| **LLM provider** (deferred) | Fallback cart extraction when the deterministic parser fails | Out | Outbound: sanitized email HTML. Inbound: structured JSON                 |
 | **Supabase**           | Postgres, Auth, file storage                                 | Out       | All application data                                                     |
 | **Vercel**             | Hosting                                                      | —         | —                                                                        |
 
@@ -61,10 +62,11 @@ flowchart TB
 
     HD["Home Depot<br/><i>external system</i>"]
     Lowes["Lowe's<br/><i>external system</i>"]
-    Mailgun["Mailgun<br/><i>email in + out</i>"]
-    Twilio["Twilio<br/><i>SMS</i>"]
-    Stripe["Stripe<br/><i>payments</i>"]
-    LLM["LLM provider<br/><i>parse fallback</i>"]
+    Mailgun["Mailgun<br/><i>email in</i>"]
+    Push["Web Push<br/><i>planned</i>"]
+    Twilio["Twilio<br/><i>SMS, later</i>"]
+    Pay["Payment processor<br/><i>planned</i>"]
+    LLM["LLM provider<br/><i>parse fallback, deferred</i>"]
 
     Customer -->|"builds & shares cart"| HD
     Customer -->|"builds & shares cart"| Lowes
@@ -72,18 +74,22 @@ flowchart TB
     Lowes -->|"share-cart email"| Mailgun
     Mailgun -->|"HMAC-signed webhook"| Platform
 
-    Customer -->|"checkout, status, payment"| Platform
+    Customer -->|"starts orders, approves, tracks delivery"| Platform
     Dispatcher -->|"reviews, prices, dispatches"| Platform
     Driver -->|"accepts jobs, posts status & photos"| Platform
 
-    Platform -->|"customer notifications"| Mailgun
-    Mailgun -->|"email"| Customer
-    Platform -->|"driver job alerts"| Twilio
-    Twilio -->|"SMS"| Driver
-    Platform -->|"creates payment links"| Stripe
-    Stripe -->|"payment webhook"| Platform
-    Platform -->|"fallback extraction"| LLM
+    Platform -.->|"new jobs, order updates"| Push
+    Push -.->|"push"| Driver
+    Push -.->|"push"| Customer
+    Push -.->|"push"| Dispatcher
+    Platform -.->|"fallback texts"| Twilio
+    Twilio -.->|"SMS"| Driver
+    Platform -.->|"payment at approval"| Pay
+    Pay -.->|"payment webhook"| Platform
+    Platform -.->|"fallback extraction"| LLM
 ```
+
+Dotted lines are planned or later; nothing is sent to drivers or customers today.
 
 ---
 
@@ -91,11 +97,11 @@ flowchart TB
 
 | Boundary | Consideration |
 |---|---|
-| **Inbound email → platform** | Anyone can send mail to our alias. Webhook authenticity is established by Mailgun's HMAC signature; sender authenticity by the retailer's DKIM. See [05-email-intake](05-email-intake.md). |
+| **Inbound email → platform** | Anyone can send mail to our alias. Webhook authenticity is established by Mailgun's HMAC signature. Sender authenticity: on the `/mime` route our app verifies the retailer's DKIM signature against the raw message, and it must align with the From domain and belong to the retailer. Only a verified Lowe's cart becomes an order without a dispatcher approving it. See [05-email-intake](05-email-intake.md). |
 | **LLM provider** | Receives sanitized email HTML. Must not receive customer PII beyond what the retailer already put in the cart email. |
 | **Customer portal → data** | Authenticated per company. Row Level Security is the enforcement point, not application code. See [10-auth-and-permissions](10-auth-and-permissions.md). |
-| **Driver app → data** | A driver must never see another driver's jobs, nor any customer data before accepting. |
-| **Stripe** | No card data ever reaches our servers. We store only Stripe identifiers and amounts. |
+| **Driver app → data** | A driver must never see another driver's jobs. Before accepting, a posting shows payout, store, delivery address, items and vehicle; the on-site contact and drop-off notes appear only after accepting. |
+| **Payment processor** (planned) | No card data should ever reach our servers. We store only the processor's identifiers and amounts. |
 | **Storage** | Receipt and delivery photos are private. Access is via short-lived signed URLs only. |
 
 ---

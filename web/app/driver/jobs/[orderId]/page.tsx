@@ -1,9 +1,10 @@
 /**
  * One job, at the link the dispatcher sends.
  *
- * Before accepting, the driver sees enough to decide — the store, the delivery
- * town, the size and the payout — and Accept. After accepting, the whole job:
- * what to buy, where it goes, who to call, and the next status step.
+ * Before accepting, the driver sees enough to decide — the payout, the store,
+ * the full delivery address, the items and the vehicle needed — and Accept.
+ * After accepting, the whole job: the on-site contact and drop-off notes, and
+ * the next status step.
  */
 
 import type { Metadata } from "next";

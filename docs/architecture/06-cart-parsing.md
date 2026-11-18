@@ -2,7 +2,7 @@
 
 Turning a retailer's share-cart email into validated line items.
 
-> **Status:** Implemented for **Lowe's** (`web/lib/parsers/`). Home Depot is a deferred retailer — its field map is kept below as a reference appendix and no parser is being built for it. The LLM tier is an interface with no implementation. Depends on [05-email-intake](05-email-intake.md).
+> **Status:** Implemented for **Lowe's** (`web/lib/parsers/`, `lowes@1.1.0`). Home Depot is planned for the pilot; no parser exists yet, and its field map is kept below as a reference appendix. The LLM tier is an interface with no implementation. Migrations `0001`–`0018` are applied. Depends on [05-email-intake](05-email-intake.md).
 
 ---
 
@@ -13,16 +13,18 @@ A deterministic HTML parser per retailer, with a human backstop. The LLM tier is
 ```mermaid
 flowchart TD
     A["inbound_emails.body_html"] --> B{Sender domain<br/>claims a parser?}
-    B -->|no| K["Email → needs_review<br/>no order created"]
+    B -->|no| K["Inbound exception<br/>no order created"]
     B -->|yes| D[LowesCartParser]
     D --> E{"zod shape +<br/>structural checks"}
-    E -->|pass| F["Order created → received"]
-    E -->|fail| I["Order → needs_review"]
-    I --> J[Dispatcher review queue]
-    J -->|correct items| F
+    E -->|fail| K
+    E -->|pass| V{"/mime route and<br/>retailer DKIM verified?"}
+    V -->|yes| F["Order created → received"]
+    V -->|no| P["Provisional preview"]
+    P -->|dispatcher approves| F
+    K -->|dispatcher| X["Dismissed"]
 ```
 
-Parsing runs **inline** in the webhook request — it is sub-second HTML extraction. A failure is recorded in `parse_attempts` and lands in the review queue rather than being retried blindly. See [ADR-0009](../adr/0009-inline-intake-and-cron-sweeps.md).
+Parsing runs **inline** in the webhook request — it is sub-second HTML extraction. A failure is recorded in `parse_attempts` and lands in the review queue as an inbound exception rather than being retried blindly. See [ADR-0009](../adr/0009-inline-intake-and-cron-sweeps.md).
 
 **Every attempt is recorded in `parse_attempts`** with strategy, parser version, output, and errors. Silent drift is the failure mode being guarded against: a retailer changing their markup would otherwise quietly produce wrong orders.
 
@@ -93,7 +95,7 @@ Derived from a real share-cart email: **3 items**, which is what confirmed the p
 | **Any price at all** — no line totals, no subtotal, no tax, not one `$` | Nothing to reconcile against. Validation is structural instead, and the dispatcher enters the materials cost by hand |
 | Store, aisle, bay | The customer captures the store before building the cart — [ADR-0010](../adr/0010-customer-captures-store-and-address.md) |
 | Requester name | The subject is generic (`Check out this Lowe's shopping cart.`) and the body gives an address, not a name |
-| A cart URL | The only links are `click.e.lowes.com` tracking redirects |
+| A cart URL | The only links are `click.e.lowes.com` tracking redirects. Each item's link is kept as `order_items.product_url` (migration `0012`) |
 
 The subject contains a **curly apostrophe** (`Lowe’s`, U+2019) and arrives RFC 2047-encoded. Nothing should assume ASCII.
 
@@ -128,11 +130,9 @@ Structural validation is weaker than arithmetic. With no subtotal, a cart that i
 
 ## Review queue
 
-When parsing fails, the order is created in `needs_review` and surfaces in the dispatcher console with the email beside an editable item table.
+When parsing fails, **no order is created**. The email surfaces in `/dispatch/review` as an inbound exception with the reason and a sandboxed preview of the email. The dispatcher can only dismiss it and ask the customer for a new cart.
 
-The dispatcher corrects the items and the order advances. This is the only manual item-entry path — and the order still originates from a real email.
-
-The manual path writes a `parse_attempts` row with `strategy = 'manual'`, so we can measure how often automation actually succeeds.
+**Planned, not built:** dispatcher item editing. When built, a manual correction should write a `parse_attempts` row with `strategy = 'manual'`, so we can measure how often automation actually succeeds.
 
 ---
 
@@ -144,7 +144,7 @@ The manual path writes a `parse_attempts` row with `strategy = 'manual'`, so we 
 | Input | `bodyHtml` with `<style>`, `<script>`, comments, and tracking URLs stripped; truncated to a budget |
 | Output | JSON conforming to `ParsedCartSchema` |
 | Validation | **Identical** to the deterministic path |
-| On failure | Order → `needs_review`; never a partially-populated order |
+| On failure | Inbound exception, as today; never a partially-populated order |
 
 The hook is the `CartParser` interface and the shared schema: the tier is an implementation of the interface, nothing more. `parse_attempts.strategy` already has an `llm` value, and migration `0004` removed the constraint that would have blocked a second attempt per email. See [12-deferred](12-deferred-and-extension-points.md#llm-fallback-tier).
 
@@ -162,7 +162,7 @@ An LLM response would never be trusted on its own — it is a candidate that mus
 | `lowes/empty-cart.eml` | Needed |
 | `homedepot/*.eml` | **Reference only** — the two samples stay in `External Notes/` until that parser is built |
 
-**Fixtures are `.eml`, not `.html`,** so a test exercises the whole input path — headers, transfer encoding, body — and cannot drift from what the customer actually produced. `__fixtures__/read-eml.ts` does the MIME work. **None of it ships:** Mailgun decodes MIME at its edge and hands the webhook already-separated fields. Two quirks in that helper are real rather than hypothetical — Lowe's folds the `From` header so the address sits on a continuation line, and RFC 2047-encodes the display name.
+**Fixtures are `.eml`, not `.html`,** so a test exercises the whole input path — headers, transfer encoding, body — and cannot drift from what the customer actually produced. `__fixtures__/read-eml.ts` does the MIME work. **None of it ships.** On the `/inbound` route Mailgun decodes MIME and hands the webhook separate fields; the `/mime` route reads the raw message with `mailparser` in `web/lib/intake/mime-email.ts`. Two quirks in that helper are real rather than hypothetical — Lowe's folds the `From` header so the address sits on a continuation line, and RFC 2047-encodes the display name.
 
 What the suite asserts:
 
@@ -196,13 +196,13 @@ Without versioning, "parsing broke last Tuesday" is unanswerable.
 
 1. **One full Lowe's `.eml` plus a redacted structural excerpt from a second pilot cart.** Both exercise three lines and unknown prices; the excerpt is not a full Mailgun form capture. A different item count and additional full, sanitized templates would strengthen drift detection. This improves parsing confidence, not retailer authentication.
 2. **No prices means no arithmetic check.** See [the honest weakness](#the-honest-weakness) above. Structural checks plus the duplicate guard plus the review queue are the whole defence.
-3. **Home Depot's multi-item structure was never observed.** Both samples hold exactly one item, so its row repetition is inferred. Moot while Home Depot is deferred, but it must be re-established rather than assumed if that parser is built.
+3. **Home Depot's multi-item structure was never observed.** Both samples hold exactly one item, so its row repetition is inferred. It must be re-established, not assumed, when that parser is built for the pilot.
 
 ---
 
 ## Appendix: Home Depot field map (reference)
 
-Kept because the analysis is done and the samples exist. **No parser is being built for this retailer.** Verified against two real samples.
+Kept because the analysis is done and the samples exist. **No parser yet; planned for the pilot.** Verified against two real samples.
 
 | Field | Location | Notes |
 |---|---|---|

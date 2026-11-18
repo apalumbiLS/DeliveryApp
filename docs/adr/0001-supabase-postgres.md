@@ -30,7 +30,7 @@ Access control is enforced by **Row Level Security policies on every table**, wi
 
 - RLS policies are SQL and are genuinely hard to get right. They require a dedicated test suite (Phase 7).
 - `security definer` helper functions are needed to avoid recursive policy evaluation on `profiles`, and each must pin `search_path` — a subtle correctness requirement.
-- The service role key bypasses RLS entirely. Its use is restricted to three enumerated places ([10-auth-and-permissions](../architecture/10-auth-and-permissions.md#service-role-usage)); a fourth use is a security review event.
+- The service role key bypasses RLS entirely. Its use is restricted to the places enumerated ([10-auth-and-permissions](../architecture/10-auth-and-permissions.md#service-role-usage)); any new use is a security review event.
 - Vendor coupling: migrating off Supabase would mean reimplementing auth and storage, not just moving a database.
 
 ## Alternatives considered

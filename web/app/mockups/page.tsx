@@ -10,6 +10,7 @@ import { ReviewQueue } from "./dispatch/review-queue";
 import { JobBoard } from "./driver/board";
 import { JobDetail, ReceiptPrompt } from "./driver/job";
 import { CleanSaas } from "./orders/clean-saas";
+import { StepWizardDetail } from "./orders/detail/wizard";
 import { ApprovalEmail } from "./start/email";
 import { StartOrderFlow } from "./start/flow";
 import { HomeScreen } from "./start/home";
@@ -82,8 +83,9 @@ const GROUPS: Group[] = [
       },
       {
         name: "Order detail",
-        note: "Status timeline, delivery info, items, price, status-driven CTA — and the review & approve state for a forwarded cart.",
+        note: "Status timeline, delivery info, items, price, status-driven CTA — and the review & approve state for a forwarded cart. Built and live at /portal/orders/[id].",
         href: "/mockups/orders/detail",
+        Component: StepWizardDetail,
       },
     ],
   },

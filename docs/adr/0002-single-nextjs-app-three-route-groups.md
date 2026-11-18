@@ -4,6 +4,8 @@
 - **Date:** 2026-09-16
 - **Deciders:** Delivery App team
 
+> **Note (2026-11-18): how the routes ended up.** The decision stands: one Next.js app, one deployment. The layout differs from the three groups named below. There is no `src/` folder and no `(dispatch)`, `(driver)` or `(portal)` group. The app lives in `web/app/`: `(console)` holds `/dispatch` and `/admin` (both dispatcher-only), `(auth)` holds `/login` and `/request-access`, and `/driver` and `/portal` are plain folders. Role checks run in each area's layout and server actions, and RLS enforces the data; `web/proxy.ts` (Next.js 16's renamed middleware) only refreshes the session and sends signed-out visitors to `/login`; it does not check roles. See [02-containers](../architecture/02-containers.md#application-module-layout).
+
 ## Context
 
 Three personas need a user interface: construction customers (portal), dispatchers (console), and delivery drivers (mobile-first job app). The team's stated preference was "maybe one front end per user persona."

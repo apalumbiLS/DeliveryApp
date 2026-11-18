@@ -2,6 +2,7 @@
 
 > **Status:** Brainstorm output, not yet promoted to `docs/`. **Revised 2026-09-21** — the flow below is superseded in part; the built mockups are the source of truth.
 > Built: `/mockups/start` (home → start an order → email → order page) and `/mockups/orders/detail` (order detail directions + the review/approve wizard). The screen hub shows what is still unbuilt.
+> **Superseded 2026-11-18 — payment.** The customer now pays when they approve, not after delivery ([ADR-0011](../docs/adr/0011-pay-on-approval.md)). The Stripe step in the flow, the "You pay after delivery" line, and the Pay CTAs for Delivered and Payment requested below no longer apply. Payments are not built yet.
 > Companion reading: [order lifecycle](../docs/architecture/04-order-lifecycle.md) · [customer guide](../docs/runbooks/customer-guide.md) · [ADR-0010](../docs/adr/0010-customer-captures-store-and-address.md).
 
 ## Screen flow
@@ -35,7 +36,7 @@ Superseded decisions below: **#1** (the one-page wizard) and **#2** (the alias c
 ## Open items
 
 - `order_intents` and `retailer_stores.store_url` are not yet in [03-data-model](../docs/architecture/03-data-model.md) — add them when implementation planning starts.
-- The share step still shows a placeholder: we have no reference for the cart's Share button on either site.
+- ~~The share step still shows a placeholder: we have no reference for the cart's Share button on either site.~~ Superseded 2026-11-18: the start flow's finish step has a built Lowe's how-to with real captures of Email Cart (`web/components/portal/start/lowes-how-to.tsx`). Home Depot has none yet.
 - Store seeding: the list, each store's verified URL, and the retailer's own label for it.
 
 ## Decisions taken in these wireframes
@@ -181,6 +182,8 @@ Delivered adds the delivery photo and receipt above the CTA. `needs_review` look
 └──────────────────────────────────────────────────────┘
 ```
 
+> Superseded 2026-11-18: approving now takes the customer to pay ([ADR-0011](../docs/adr/0011-pay-on-approval.md)).
+
 ## Order detail CTA by status
 
 | Order status            | Primary CTA                                      |
@@ -191,6 +194,8 @@ Delivered adds the delivery photo and receipt above the CTA. `needs_review` look
 | Delivered               | **Pay $482.80** → Stripe (photo + receipt above) |
 | Payment requested       | **Pay $482.80** → Stripe                         |
 | Paid / closed           | none                                             |
+
+> Superseded 2026-11-18: the two Pay rows no longer apply. Payment happens at approval ([ADR-0011](../docs/adr/0011-pay-on-approval.md)), so nothing is due after delivery.
 
 ## Open questions
 

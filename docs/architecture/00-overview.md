@@ -2,16 +2,24 @@
 
 Establish the full system architecture, data model, and phased build plan for a construction-site delivery MVP — starting with a repo-committed set of Markdown + Mermaid design documents.
 
-> **Status:** Approved architecture. Phase 0 (design artifacts) complete.
-> **Owner:** Delivery App team · **Last updated:** 2026-09-16
+> **Status:** Approved architecture. The full order flow is built up to delivery; payments and notifications are decided but not built (2026-11-18).
+> **Owner:** Delivery App team · **Last updated:** 2026-11-18
 
 ---
 
 ## Summary
 
-Build the systems needed for a construction-site delivery MVP: a Next.js app (three role-guarded UIs) on Supabase, with a Mailgun-driven email-cart intake that parses **Lowe's** share-cart emails into structured orders, a dispatcher console that drives the order through a guarded state machine, a driver job board with first-accept-wins dispatch, and Stripe Payment Links for collection.
+Build the systems needed for a construction-site delivery MVP: a Next.js app (role-guarded UIs for customers, dispatchers and drivers) on Supabase, with a Mailgun-driven email-cart intake that parses **Lowe's** share-cart emails into structured orders, a dispatcher console that drives the order through a guarded state machine, a driver job board with first-accept-wins dispatch, and payment when the customer approves.
 
-This document describes the longer-term product roadmap, **not the set of features already live**. The current prototype milestone is narrower: a customer shares a Lowe's cart to a shared Mailgun address or an optional one-use portal address; the app parses it into dispatcher review, where a person supplies or confirms missing site/store/price details. The portal's pre-cart flow is optional. Customer checkout invitations, outbound mail, automated dispatch and payments are **not enabled**. [05-email-intake](05-email-intake.md) documents the current receiving setup and outstanding hardening.
+**What is built today (2026-11-18):**
+
+1. The customer starts an order in the portal (or uses the stable company address) and emails their Lowe's cart to a `delivery+<token>@…` address.
+2. Mailgun forwards it to our webhook. On the raw-MIME route (`/api/webhooks/mailgun/mime`), a Lowe's cart whose DKIM signature verifies, sent to a known company or intent address, becomes an order directly. Anything else, and everything on the older parsed-fields route, becomes a preview a dispatcher must approve. Mailgun's forward URL still points at the older route until it is switched.
+3. The dispatcher reviews the order, sets the delivery size (Car or Truck), types the fees by hand and sends it for approval. No email is sent; the customer sees it in the portal.
+4. The customer approves in the portal. Approval posts the job to drivers at once.
+5. The dispatcher copies the job link and sends it to drivers by hand. The first driver to accept gets it, then steps through store, purchase (receipt photo), on the way and delivered (delivery photo).
+
+**Decided, not built:** the customer pays at approval, and only a cleared payment posts the job; Web Push notifications, then Twilio texts later. [05-email-intake](05-email-intake.md) documents the receiving setup.
 
 ---
 
@@ -45,26 +53,29 @@ These five findings were derived by inspecting the real Home Depot share-cart em
 | Area            | Decision                                                                                  |
 | --------------- | ----------------------------------------------------------------------------------------- |
 | Persistence     | Supabase (Postgres + Auth + Storage + RLS)                                                |
-| Front end       | Next.js App Router, **one app, 3 route groups**: `/dispatch`, `/driver`, `/portal`        |
+| Front end       | Next.js App Router, **one app**: `/dispatch` and `/admin` (console), `/driver`, `/portal` |
 | Hosting         | Vercel                                                                                    |
-| Email in + out  | **Mailgun** inbound webhook; outbound customer email deferred from current milestone      |
-| Retailers       | **Lowe's only.** Home Depot and Ace are deferred — no parser and no seeded stores         |
-| SMS             | Twilio                                                                                    |
-| Payments        | Stripe Payment Links + webhook                                                            |
-| Background jobs | **Vercel Cron sweeps** over a notifications outbox + broadcast expiry. No workflow engine |
-| Intake paths    | Stable company Mailgun address is enough; optional pre-cart portal flow; no live checkout |
+| Email in + out  | **Mailgun** inbound webhook. Outbound email not built                                     |
+| Sender check    | Our app verifies the retailer's DKIM signature on the raw-MIME route; a verified Lowe's cart to a known address becomes an order directly |
+| Retailers       | **Lowe's only.** Home Depot is planned for the pilot; Ace is deferred                     |
+| Notifications   | **Web Push** to the home-screen app first; Twilio texts later as a fallback. Decided 2026-11-18, **not built** — nothing is sent today |
+| Payments        | **Customer pays at approval**; only a cleared payment approves the order and posts it. Decided 2026-11-18, **not built**; payment account being set up. Replaces pay-after-delivery Stripe Payment Links ([ADR-0006](../adr/0006-stripe-payment-links.md)) |
+| Background jobs | **Vercel Cron sweeps** over a notifications outbox + broadcast expiry. No workflow engine. None built yet |
+| Intake paths    | Stable company Mailgun address, or the portal's start-an-order flow                      |
 | Order identity  | Shared `delivery@` pilot address (dispatcher assigns company); optional portal `delivery+<token>` one-use addresses via migrations `0008`/`0010` |
 | Company model   | Company = org, **one portal login** per company                                           |
 | Auth            | Email-as-username + password (Supabase Auth)                                              |
 | Store capture   | Customer supplies it in optional portal flow; dispatcher collects it for direct-email orders |
 | Parsing         | Deterministic parser → schema validation → dispatcher review queue. **LLM fallback deferred** |
 | Item metadata   | Email fields only. No enrichment API, no scraping.                                        |
-| Quote           | **Manual fee entry** by dispatcher                                                        |
-| Driver comms    | In-app job board + SMS notify; first-accept-wins                                          |
-| Customer UX     | Simplified portal: login, history, order detail/status, checkout                          |
+| Delivery size   | **Car or Truck**                                                                          |
+| Quote           | **Fees typed by hand** by the dispatcher: materials, sizing fee, mileage fee              |
+| Driver comms    | Posted to drivers automatically when the customer approves; dispatcher copies the job link by hand; first accept wins. Push planned, texts later |
+| Customer UX     | Simplified portal: login, start an order, history, order detail with delivery progress, approval |
 | Photo gates     | **Prompt but never block**; skip requires a reason                                        |
 | Parallel run    | **None.** No Slack, no Google Sheets. App is the sole system of record.                   |
 | Market          | Upstate South Carolina → Supabase `us-east-1`                                             |
+| Environments    | **One Supabase project** for the pilot, no staging (decided 2026-11-18)                  |
 | Docs            | Markdown + Mermaid, committed in-repo                                                     |
 
 Each decision has a corresponding ADR in [`docs/adr/`](../adr/README.md).
@@ -75,23 +86,35 @@ Each decision has a corresponding ADR in [`docs/adr/`](../adr/README.md).
 
 ### In scope
 
-- Email alias intake → deterministic **Lowe's** cart parse → order created
-- Dispatcher console: review queue, order board, item verification/edit, store assignment, fee entry, status transitions, complete-checkout-on-behalf, payment link send
-- Customer portal: login, order list + history, order detail with status timeline, checkout wizard (verify items → address + instructions → fees → accept → pay)
-- Driver app (mobile-first): job board, accept, status advance, photo upload (skippable with reason)
-- SMS/email notifications for checkout invite, job broadcast, payment request
-- Stripe Payment Links + paid-state webhook
-- Admin: companies + aliases + portal users, store seeding, driver management
+Built:
+
+- Email alias intake → deterministic **Lowe's** cart parse → order created (directly when the DKIM signature verifies on the raw-MIME route; otherwise after dispatcher approval)
+- Dispatcher console: review queue, queue tabs from review to delivered, store assignment, Car/Truck size, fee entry, send for approval and undo, driver payout, copy job link, release driver, receipt and delivery photos
+- Customer portal: login, start an order, order list + history, order detail with delivery progress and delivery photos, approval (confirm on-site contact and drop-off instructions)
+- Driver app (mobile-first, installable to the home screen): job board, posting details before accepting, first-accept-wins, status steps, receipt and delivery photos (skippable with reason)
+- Admin: create users (customer, driver, dispatcher), change role or company, deactivate
+
+Decided, not built:
+
+- Payment at approval, with a signed payment webhook
+- Web Push: drivers on a new job; customers when sent for approval, driver on the way, and delivered; dispatchers when all drivers decline
+- Decline on the driver's job page
+- Home Depot parser
+- Dispatcher item editing
+
+Later: Twilio texts, outbound email, company and store screens in the admin (companies and stores are added in SQL today).
 
 ### Explicitly deferred
 
 Designed for, not built. Each item's extension hook is documented in [12-deferred-and-extension-points.md](12-deferred-and-extension-points.md).
 
-Item substitution · cancellation UI · automated customer status fan-out · multi-store orders · parts catalog / concierge procurement · smart iFrame · chat experience · aisle/bay data · product enrichment API · native mobile apps · driver payouts (Stripe Connect) · fee rule engine · Slack integration · **Home Depot and Ace parsers** · **LLM fallback tier**
+Item substitution · cancellation UI · automated customer status fan-out beyond the planned push events · multi-store orders · parts catalog / concierge procurement · smart iFrame · chat experience · aisle/bay data · product enrichment API · native mobile apps · driver payouts (Stripe Connect) · fee rule engine · Slack integration · staging environment · **Ace parser** · **LLM fallback tier**
 
 ---
 
 ## Target architecture
+
+Dashed boxes are decided but not built: payments, Web Push, Twilio texts and cron sweeps. Outbound email is not built either.
 
 ```mermaid
 flowchart TB
@@ -108,7 +131,7 @@ flowchart TB
 
     subgraph App["Next.js on Vercel (single app)"]
         PORTAL["/portal — customer"]
-        DISP["/dispatch — dispatcher"]
+        DISP["/dispatch + /admin — dispatcher"]
         DRIVER["/driver — driver PWA"]
         API[Route handlers + server actions]
     end
@@ -119,55 +142,65 @@ flowchart TB
         STORE[(Storage: evidence)]
     end
 
-    MG["Mailgun<br/>inbound + outbound"]
-    TW[Twilio SMS]
-    ST[Stripe Payment Links]
-    CRON["Vercel Cron<br/>sweeps"]
+    MG["Mailgun<br/>inbound (outbound later)"]
+    PUSH["Web Push<br/>(planned)"]
+    TW["Twilio SMS<br/>(later)"]
+    ST["Payment processor<br/>(planned)"]
+    CRON["Vercel Cron<br/>sweeps (planned)"]
 
     C -->|builds cart| HD
     C -->|builds cart| LW
     HD -.->|share-cart email| MG
     LW -.->|share-cart email| MG
-    MG -->|HMAC-signed webhook| API
-    CRON -->|scheduled| API
+    MG -->|"HMAC-signed webhook<br/>(raw MIME: DKIM checked)"| API
+    CRON -.->|scheduled| API
     API --> PG
     API --> STORE
-    API --> MG
-    API --> TW
-    API --> ST
-    ST -->|paid webhook| API
+    API -.-> MG
+    API -.-> PUSH
+    API -.-> TW
+    API -.-> ST
+    ST -.->|paid webhook| API
     C --> PORTAL
     D --> DISP
     R --> DRIVER
     PORTAL --> AUTH
     DISP --> AUTH
     DRIVER --> AUTH
+
+    classDef planned stroke-dasharray: 5 5
+    class PUSH,TW,ST,CRON planned
 ```
 
 ### Order lifecycle (guarded state machine)
 
+What is built today:
+
 ```mermaid
 stateDiagram-v2
-    [*] --> received
-    received --> needs_review : parse failed
-    needs_review --> awaiting_customer : dispatcher resolves items
-    received --> awaiting_customer : checkout invite sent
-    awaiting_customer --> customer_confirmed : items + address + fees accepted
-    awaiting_customer --> customer_confirmed : dispatcher completes on behalf
-    customer_confirmed --> driver_requested : broadcast to drivers
+    [*] --> received : verified cart, or dispatcher approves the preview
+    received --> awaiting_customer : Send for approval
+    needs_review --> awaiting_customer : Send for approval
+    awaiting_customer --> needs_review : Undo send
+    awaiting_customer --> customer_confirmed : customer approves
+    customer_confirmed --> driver_requested : posted at once
     driver_requested --> driver_assigned : first accept wins
     driver_assigned --> driver_at_store
     driver_at_store --> items_purchased : receipt photo prompted
     items_purchased --> en_route
     en_route --> delivered : delivery photo prompted
-    delivered --> payment_requested : Stripe link sent
-    payment_requested --> paid : Stripe webhook
-    paid --> closed
-    cancelled --> [*]
-    closed --> [*]
+    driver_assigned --> driver_requested : Release driver
+    driver_at_store --> driver_requested : Release driver
+    items_purchased --> driver_requested : Release driver
+    en_route --> driver_requested : Release driver
+    delivered --> [*]
 ```
 
-`cancelled` exists in the enum and the transition map from day one, but has no UI in the MVP — that is what makes cancellation a small later addition rather than a refactor.
+`delivered` is the last step today; nothing moves an order past it. A cart that fails to parse never becomes an order: it stays an inbound email the dispatcher can only dismiss.
+
+**Planned (decided 2026-11-18, not built):** approving takes the customer to pay. The order stays `awaiting_customer` until the payment clears, and only a cleared payment moves it to `customer_confirmed` and posts it. This replaces the old `delivered → payment_requested → paid → closed` design; those values remain in the enum.
+
+`cancelled` exists in the enum from day one, but has no UI in the MVP — that is what makes cancellation a small later addition rather than a refactor.
 
 ### Parsing fallback ladder
 
@@ -175,15 +208,16 @@ stateDiagram-v2
 flowchart TD
     A[Inbound email arrives] --> B{Retailer identified<br/>from sender domain}
     B -->|e.lowes.com| D[LowesCartParser]
-    B -->|no parser for that retailer| K["Email → needs_review<br/>no order created"]
+    B -->|no parser for that retailer| K["Email held for review<br/>no order created"]
     D --> E{zod + structural<br/>validation}
-    E -->|yes| F[Create order → received]
-    E -->|no| I[Order → needs_review]
-    I --> J[Dispatcher review queue]
-    J -->|correct items| F
+    E -->|yes| V{"DKIM verified (raw-MIME route)<br/>and known address?"}
+    V -->|yes| F[Create order → received]
+    V -->|no| P[Provisional preview]
+    P -->|dispatcher approves| F
+    E -->|no| I["Failed parse<br/>dispatcher can only dismiss"]
 ```
 
-Every attempt — deterministic or manual — is recorded in `parse_attempts` with parser version, output, and errors, so template drift is visible rather than silent. The LLM tier is deferred; when it lands it slots in between `E -->|no|` and `I`.
+Every parse attempt is recorded in `parse_attempts` with parser version, output, and errors, so template drift is visible rather than silent. Dispatcher item editing for failed parses is planned. The LLM tier is deferred; when it lands it slots in between `E -->|no|` and `I`.
 
 ---
 
@@ -289,11 +323,11 @@ docs/
     0007-email-password-auth.md
     0008-dispatcher-assigns-store.md
     0009-inline-intake-and-cron-sweeps.md
+    0010-customer-captures-store-and-address.md
   runbooks/
     customer-guide.md
     dispatcher-guide.md
     driver-guide.md
-    dry-run-checklist.md
 ```
 
 ---
@@ -312,33 +346,33 @@ docs/
 
 **Verified:** 16/16 Mermaid diagrams parse; 104 file links and 11 anchor links resolve. See the [verification checklist](#verification-checklist).
 
-### Phase 1 — Foundation
+### Phase 1 — Foundation ✅ built
 
-Next.js/Bun and Supabase schema are scaffolded; the pilot has South Carolina Lowe's store data (North Carolina is also seeded). Your temporary Mailgun domain is verified for ownership but receiving MX and the Vercel callback still require an operator-run live test. Historical phase names below describe the broader roadmap, not the order in which to enable customer checkout.
+Next.js/Bun app and Supabase schema (migrations `0001`–`0018`, applied by hand in the SQL editor). The pilot has South Carolina Lowe's store data (North Carolina is also seeded). One Supabase project for the pilot, no staging (decided 2026-11-18).
 
-### Phase 2 — Email intake + parsing _(highest risk — deliberately early)_
+### Phase 2 — Email intake + parsing ✅ built for Lowe's
 
-A real Lowe's cart reached the signed Mailgun webhook and provisional dispatcher review; the user manually approved it into an order using applied migration `0009`. The optional portal's `delivery+<token>` address was also tested after the user applied `0010`: company and intended site/store transfer after approval. Phase 4B prepares dispatcher delivery/contact/store/pricing edits in migration `0011`; no checkout invitation or driver dispatch is enabled. Home Depot and AI fallback are deferred.
+Mailgun forwards cart emails to two routes. `/api/webhooks/mailgun/inbound` (parsed fields, the current Mailgun setting) turns every parsed cart into a preview a dispatcher approves. `/api/webhooks/mailgun/mime` (raw MIME, migration `0017`) verifies the retailer's DKIM signature; a verified Lowe's cart sent to a known company or intent address becomes an order directly. Mailgun's forward URL still has to be switched to `/mime`. Portal order intents are matched to their cart. Home Depot is planned for the pilot; the AI fallback is deferred.
 
-### Phase 3 — Dispatcher console
+### Phase 3 — Dispatcher console ✅ built
 
-Review queue · order board with aging indicators · order detail (verify/edit items, assign store, enter fees, advance status, complete-on-behalf) · admin for companies, aliases, portal users, stores, drivers.
+Review queue · queue tabs (To review, Awaiting approval, Finding driver, With driver, Delivered, All) · order detail (store, Car/Truck size, fees typed by hand, send for approval and undo, driver payout, copy job link, release driver, step times, receipt and delivery photos) · admin for users (create, change role or company, deactivate). Not built: item editing (planned), approving on a customer's behalf, company and store screens (added in SQL).
 
-### Phase 4 — Customer portal + checkout
+### Phase 4 — Customer portal ✅ built, payment planned
 
-Login · order list + history · order detail with status timeline · checkout wizard · saved job sites · checkout-invite email.
+Login · start an order · order list + history · order detail with delivery progress and delivery photos · approval (confirm on-site contact and drop-off instructions). Not built: payment at approval (decided 2026-11-18) and push notifications.
 
-### Phase 5 — Dispatch + driver app
+### Phase 5 — Dispatch + driver app ✅ built, notifications planned
 
-Job board (all open postings) · atomic first-accept-wins through the transition choke point · Twilio broadcast · mobile-first driver UI · status advance · photo upload with skip-reason.
+Job board (all open postings) · posting shows payout, store, full delivery address, items and vehicle before accepting · atomic first-accept-wins (`accept_job`) · mobile-first driver UI, installable to the home screen · status steps · receipt and delivery photos with skip-reason. Posting happens automatically when the customer approves; the dispatcher sends the job link by hand. Not built: Decline (planned for the pilot), Web Push (planned), Twilio texts (later).
 
-### Phase 6 — Payments
+### Phase 6 — Payments _(decided, not built)_
 
-Stripe Payment Link creation · send on `delivered` · `checkout.session.completed` webhook → `paid` · receipt email.
+The customer pays at approval; the order stays `awaiting_customer` until the payment clears, and only a cleared payment approves it and posts it to drivers. Needs a signed payment webhook and a receipt. Waiting on the payment processor account. Replaces the earlier Stripe Payment Link sent on `delivered`.
 
 ### Phase 7 — Hardening
 
-Structured logging + error tracking · system-health panel · RLS test suite · concurrency test on the accept race · runbooks.
+Structured logging + error tracking · system-health panel · RLS test suite · concurrency test on the accept race · runbooks. Not started; there is no CI yet.
 
 ---
 
@@ -374,15 +408,19 @@ Phase 0 self-verification, with the evidence for each item.
 | PII exposure (addresses, phones, receipt photos)                              | RLS on every table, private storage bucket, signed URLs only                                                     |
 | Three UIs in one app risks a muddled boundary                                 | Route groups + role guards from commit one; the ADR records when to split                                        |
 | "Prompt but never block" photos weakens the dispute evidence trail            | Every skip records a reason and is visible on the order detail and to the dispatcher                             |
-| Portal is load-bearing with no email fallback for address/acceptance          | Dispatcher can complete checkout on the customer's behalf; treat portal availability as critical during dry runs |
+| Portal is load-bearing with no email fallback for address/acceptance          | Pilot customers approve (and, once built, pay) themselves; approving on a customer's behalf is not built. Treat portal availability as critical during the pilot |
 
 ---
 
 ## Open blockers
 
-To resolve before Phase 2:
+To resolve before the pilot:
 
-1. **A temporary Mailgun account** — API key, signing key, and inbound domain, set as environment variables. Replacing it with the client's is a config-only change; see [11-deployment](11-deployment-and-environments.md#swapping-the-mailgun-account).
-2. **A second Lowe's cart** — one sample is thin evidence for the extractor.
-3. **Stripe and Twilio accounts** — Supabase and Vercel already exist; Mailgun is temporary.
-4. **A domain, eventually** — the customer-facing alias address changes when the client's account replaces the temporary one.
+1. **Payment processor account** — a teammate is setting it up. Payment at approval cannot be built until it exists.
+2. **Switch Mailgun's forward URL to `/api/webhooks/mailgun/mime`** — a teammate task. Until then every cart waits for dispatcher approval.
+3. **More Lowe's samples** — tests cover one full cart and a redacted excerpt of a second; more samples strengthen the extractor.
+
+Later:
+
+- **Twilio account and US carrier (A2P 10DLC) registration** — for texts after push; registration takes several days.
+- **A domain, eventually** — the customer-facing alias address changes when the client's Mailgun account replaces the temporary one; see [11-deployment](11-deployment-and-environments.md#swapping-the-mailgun-account).

@@ -31,16 +31,15 @@ Design and architecture documentation for the construction-site delivery MVP.
 ## Other directories
 
 - **[adr/README.md](adr/README.md)** — Architecture Decision Records. One per locked decision, with the alternatives we rejected and why.
-- **[runbooks/README.md](runbooks/README.md)** — Operational guides per persona plus the dry-run checklist. These describe the **new** system; the PDFs in `External Notes/` describe the retired low-tech process.
+- **[runbooks/README.md](runbooks/README.md)** — Operational guides per persona. These describe the **new** system; the PDFs in `External Notes/` describe the retired low-tech process.
 
 ### Runbooks
 
 | Guide                                              | Audience                                            |
 | -------------------------------------------------- | --------------------------------------------------- |
-| [Dispatcher guide](runbooks/dispatcher-guide.md)   | The operational core — order review through payment |
+| [Dispatcher guide](runbooks/dispatcher-guide.md)   | The operational core — review through delivery      |
 | [Driver guide](runbooks/driver-guide.md)           | Accepting jobs, buying, delivering, evidence        |
-| [Customer guide](runbooks/customer-guide.md)       | Building and sharing a cart, checkout, receiving    |
-| [Dry-run checklist](runbooks/dry-run-checklist.md) | Rehearsal plan and deliberate failure tests         |
+| [Customer guide](runbooks/customer-guide.md)       | Sharing a cart, approving, tracking delivery        |
 
 ## Where to look for what
 

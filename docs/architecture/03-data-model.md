@@ -2,7 +2,7 @@
 
 Schema conventions, the entity relationship diagram, and a table-by-table reference.
 
-> **Status:** The client-pilot project has applied migrations through `0010`. Migration `0011_dispatcher_draft_updates.sql` is prepared for review and has not been applied or SQL-tested.
+> **Status:** Migrations `0001`–`0018` are applied to the pilot Supabase project, by hand in the SQL editor (2026-11-18).
 
 ---
 
@@ -179,10 +179,10 @@ Every message that reaches the inbound webhook, stored before any interpretation
 | `company_id`         | uuid FK → companies                                  | Migration `0009`; null for unknown recipient until dispatcher assigns |
 | `review_reason`      | text                                                 | Migration `0009`; visible exception/provisional reason |
 | `review_status`      | text NOT NULL DEFAULT 'pending'                      | Migration `0009`: pending / approved / dismissed; no order before approval |
-| `order_id`           | uuid FK → orders                                     | Null until dispatcher approval finalizes an order     |
+| `order_id`           | uuid FK → orders                                     | Null until the cart becomes an order: dispatcher approval, or a verified retailer email (`0017`) |
 | `received_at`        | timestamptz NOT NULL                                 |                                                        |
 
-Storing the HTML email and headers before interpreting them makes the parser re-runnable. The full raw MIME is **not** currently stored in `raw_storage_path`; optional Mailgun `store()` (without `notify`) is the temporary backup. Parsed contents are provisional until a dispatcher approves; migration `0009` defines the one-call SQL finalization contract for order, items, intent claim, audit event and inbound link. The user applied `0009` and approved one real cart. The user applied `0010` and verified that a new token cart mapped to the intended company and store after approval.
+Storing the HTML email and headers before interpreting them makes the parser re-runnable. The full raw MIME is **not** currently stored in `raw_storage_path`; optional Mailgun `store()` (without `notify`) is the temporary backup. Parsed contents are provisional until they become an order. `finalize_inbound_cart` (see [SQL functions](#sql-functions)) creates the order, items, intent claim, audit event and inbound link in one transaction. A dispatcher calls it when approving a preview; the `/mime` webhook calls it with no reviewer when the retailer's DKIM signature verifies (`0017`). A failed parse never becomes an order; the dispatcher can only dismiss it.
 
 ### `parse_attempts`
 
@@ -191,7 +191,7 @@ One row per extraction attempt — the telemetry that makes template drift visib
 | Column             | Type                               | Notes                                              |
 | ------------------ | ---------------------------------- | -------------------------------------------------- |
 | `id`               | uuid PK                            |                                                    |
-| `inbound_email_id` | uuid FK → inbound_emails NOT NULL  | **Unique** — makes inline re-processing idempotent |
+| `inbound_email_id` | uuid FK → inbound_emails NOT NULL  | Not unique: migration `0004` allows one row per attempt |
 | `strategy`         | parse_strategy NOT NULL            |                                                    |
 | `parser_version`   | text                               | e.g. `homedepot@1.2.0`                             |
 | `succeeded`        | boolean NOT NULL                   |                                                    |
@@ -207,12 +207,12 @@ One row per extraction attempt — the telemetry that makes template drift visib
 | Column                      | Type                                     | Notes                                                             |
 | --------------------------- | ---------------------------------------- | ----------------------------------------------------------------- |
 | `id`                        | uuid PK                                  |                                                                   |
-| `order_number`              | text UNIQUE NOT NULL                     | Human reference, e.g. `QC-2609-0042`                              |
+| `order_number`              | text UNIQUE NOT NULL                     | Human reference, e.g. `#2001`. Filled on insert by a trigger from `order_number_seq`, which starts at 2000 (migration `0005`) |
 | `company_id`                | uuid FK → companies NOT NULL             |                                                                   |
 | `inbound_email_id`          | uuid FK → inbound_emails                 |                                                                   |
 | `retailer`                  | retailer NOT NULL                        |                                                                   |
 | `retailer_store_id`         | uuid FK → retailer_stores                | **Null until the dispatcher sets it**                             |
-| `status`                    | order_status NOT NULL DEFAULT 'received' | Pilot dispatcher edits keep `received`/`needs_review`; no checkout transition |
+| `status`                    | order_status NOT NULL DEFAULT 'received' | See [04-order-lifecycle](04-order-lifecycle.md) |
 | `requester_name`            | text                                     | Parsed from the email subject                                     |
 | `requester_email`           | citext                                   |                                                                   |
 | `materials_subtotal_cents`  | int NOT NULL DEFAULT 0                   | Lowe's share email has no price; zero means unknown until the dispatcher enters an estimate |
@@ -226,15 +226,16 @@ One row per extraction attempt — the telemetry that makes template drift visib
 | `delivery_instructions`     | text                                     |                                                                   |
 | `site_id`                   | uuid FK → company_sites                  | Provenance only                                                   |
 | `delivery_size`             | delivery_size                            | `car` / `truck` — the vehicle class the sizing fee is keyed to. Null until a dispatcher picks one; added by migration `0006`, Pickup dropped in `0016` |
-| `assigned_driver_id`        | uuid FK → profiles                       |                                                                   |
+| `assigned_driver_id`        | uuid FK → profiles                       | Written by `accept_job`; cleared by `release_driver`              |
+| `driver_payout_cents`       | int, CHECK 0–10,000,000                  | Migration `0013`. What the driver is paid; a company cost, not part of `total_cents`, never shown in the portal. Null until a dispatcher sets it or approval defaults it |
 | `customer_confirmed_at`     | timestamptz                              |                                                                   |
-| `confirmed_by_profile_id`   | uuid FK → profiles                       | Set when a dispatcher completes checkout on the customer's behalf |
+| `confirmed_by_profile_id`   | uuid FK → profiles                       | Not written today. Reserved for a dispatcher approving on the customer's behalf (not built) |
 | `cancellation_reason`       | text                                     | Unused in MVP; present so cancellation is additive                |
 | `created_at` / `updated_at` | timestamptz NOT NULL DEFAULT now()       |                                                                   |
 
-Migration `0011` defines `update_dispatcher_draft`: only an authenticated active dispatcher can update an open order's store, delivery/contact snapshot, or materials estimate and fees. The update and a same-status audit event commit together. A manually changed address clears a stale `site_id`. This function is prepared but has not been executed against Postgres; mock tests verify only the RPC call contract.
+Dispatcher edits during review go through `update_dispatcher_draft`; the payout goes through `set_driver_payout`. See [SQL functions](#sql-functions).
 
-`confirmed_by_profile_id` is the audit answer to "who agreed to this price". When the customer completes checkout it stays null and `customer_confirmed_at` is the evidence; when a dispatcher completes it on their behalf, both are set.
+`confirmed_by_profile_id` is the audit answer to "who agreed to this price". When the customer approves in the portal (`approve_order`) it stays null; `customer_confirmed_at` and the status event record who approved and when.
 
 ### `order_items`
 
@@ -251,6 +252,7 @@ Migration `0011` defines `update_dispatcher_draft`: only an authenticated active
 | `unit_price_cents`       | int                                         | **Derived**: `line_total_cents / quantity`              |
 | `line_total_cents`       | int NOT NULL DEFAULT 0                      | As printed in the email                                 |
 | `image_url`              | text                                        |                                                         |
+| `product_url`            | text                                        | Migration `0012`. The item's link from the cart email (Lowe's click-tracking redirect); HTTPS only, ≤ 2,000 chars. Null for orders finalized before `0012` |
 | `aisle` / `bay`          | text                                        | Columns exist in the email's item cell; populated in one sample, empty in the other. Store-scoped — valid only at the store the cart was built against |
 | `item_status`            | item_status NOT NULL DEFAULT 'pending'      | Drives the deferred substitution feature                |
 | `substituted_by_item_id` | uuid FK → order_items                       | Unused in MVP                                           |
@@ -270,7 +272,7 @@ Append-only audit log. Never updated, never deleted.
 | `to_status`        | order_status NOT NULL              |                                                      |
 | `actor_profile_id` | uuid FK → profiles                 | Null when system-initiated                           |
 | `actor_role`       | user_role                          |                                                      |
-| `source`           | text                               | `webhook`, `cron`, `console`, `driver_app`, `portal` |
+| `source`           | text                               | Written today: `console`, `portal`, `driver_app`, `system` (approval posting the job), `email` (verified-email order, `0017`) |
 | `note`             | text                               |                                                      |
 | `metadata`         | jsonb                              |                                                      |
 | `created_at`       | timestamptz NOT NULL DEFAULT now() |                                                      |
@@ -298,7 +300,7 @@ A draft captured by the portal's start-an-order flow: the site, retailer, and st
 
 `delivery_address` is a snapshot rather than a read-through to `site_id` for two reasons: a customer can type an address that is not yet a saved site, and a saved site can be edited later. The intent records what was agreed, not what the site happens to say today.
 
-The inbound processor conditionally sets `matched` for the first successfully parsed eligible email received at this token; a failed parse does not consume the intent. It never chooses the company's newest intent for a stable-alias email. A second distinct message to the used token belongs to the same company but receives no old site/store. Expiry sweeps remain deferred; the token remains a routing identifier for its company. The current intake writes are **not yet atomic** — do not rely on them for real Mailgun delivery until the next phase. See [12-deferred-and-extension-points](12-deferred-and-extension-points.md).
+`finalize_inbound_cart` sets `matched` when the first eligible email to this token becomes an order, in the same transaction as the order. A failed parse does not consume the intent. It never chooses the company's newest intent for a stable-alias email. A second distinct message to the used token belongs to the same company but receives no old site/store. Expiry sweeps are not built; the token remains a routing identifier for its company. See [12-deferred-and-extension-points](12-deferred-and-extension-points.md).
 
 ### `job_declines`
 
@@ -313,7 +315,7 @@ A driver's "no" on an open posting. Append-only; the only per-driver dispatch fa
 | `created_at`   | timestamptz NOT NULL DEFAULT now()          |                                  |
 |                |                                             | UNIQUE (`order_id`, `driver_id`) |
 
-Declines do not change the order's status. The dispatcher is notified of each one, and an order every active driver has declined is flagged in the console. There is deliberately **no per-driver offer table**: at MVP scale every active driver sees every posting, so the board is a query over `orders` and the only assignment state is `orders.assigned_driver_id`. See [07-dispatch](07-dispatch.md).
+**Decline is not built yet:** the table exists and `get_open_jobs_for_driver` already hides a job the caller declined, but no screen writes a row. Planned for the pilot: declines do not change the order's status, and when every driver has declined, the console flags "All drivers declined" at the top of Finding driver. There is deliberately **no per-driver offer table**: at MVP scale every active driver sees every posting, so the board is a query over `orders` and the only assignment state is `orders.assigned_driver_id`. See [07-dispatch](07-dispatch.md).
 
 ### `attachments`
 
@@ -322,14 +324,27 @@ Declines do not change the order's status. The dispatcher is notified of each on
 | `id`           | uuid PK                            |                                       |
 | `order_id`     | uuid FK → orders NOT NULL          |                                       |
 | `kind`         | attachment_kind NOT NULL           |                                       |
-| `storage_path` | text NOT NULL                      | Private bucket                        |
+| `storage_path` | text                               | Path in the private `evidence` bucket, `<order id>/…`. Nullable since `0013` |
 | `content_type` | text                               |                                       |
 | `size_bytes`   | int                                |                                       |
 | `uploaded_by`  | uuid FK → profiles                 |                                       |
 | `skip_reason`  | text                               | Set when a prompted photo was skipped |
 | `created_at`   | timestamptz NOT NULL DEFAULT now() |                                       |
 
-`skip_reason` is what makes "prompt but never block" auditable rather than a silent gap in the evidence trail.
+`skip_reason` is what makes "prompt but never block" auditable rather than a silent gap in the evidence trail. Check `attachments_file_or_reason` (`0013`): a row has a `storage_path` or a non-blank `skip_reason`. A skipped photo is a row with a reason and no file. `advance_job` writes the rows: `receipt` at Items purchased, `delivery` at Delivered.
+
+Read policy (`0013`): customers see `delivery` rows on their own orders, never the receipt; dispatchers and the assigned driver see both.
+
+#### Storage: the `evidence` bucket
+
+Migration `0013` creates the private `evidence` bucket: 25 MB per file, JPEG, PNG, WebP or HEIC/HEIF only. Files live under `<order id>/`. The driver's phone uploads straight to it; the app serves files through short-lived signed URLs (`/dispatch/photo/[id]`, `/portal/photo/[id]`).
+
+| Policy on `storage.objects` | Command | Who |
+| --- | --- | --- |
+| `evidence_driver_insert` | insert | The assigned driver, while the order is `driver_at_store` or `en_route` (the two photo steps) |
+| `evidence_dispatcher` | all | Dispatchers |
+| `evidence_read` | select | Anyone who may read the matching `attachments` row; the assigned driver for files on their job |
+| `evidence_driver_delete` | delete | `0018`. The driver who uploaded the file (`owner_id`), while still at a photo step on that job, and only if no `attachments` row points at it — clears a failed step's leftover upload |
 
 ### `notifications`
 
@@ -352,7 +367,7 @@ Declines do not change the order's status. The dispatcher is notified of each on
 | `sent_at`             | timestamptz                                   |                                |
 | `created_at`          | timestamptz NOT NULL DEFAULT now()            |                                |
 
-`dedupe_key` (typically `order_id:template_key`) is essential: sends are retried by the outbox sweep, and a customer receiving two payment requests is a trust problem.
+Nothing writes this table yet: no notifications are sent (see [08-notifications](08-notifications.md)). `dedupe_key` (typically `order_id:template_key`) is essential: sends are retried by the outbox sweep, and a customer receiving two payment requests is a trust problem.
 
 ### `payments`
 
@@ -385,6 +400,7 @@ Beyond primary and foreign keys:
 | `orders`              | unique (`order_number`)                 | Human reference lookup           |
 | `inbound_emails`      | unique (`mailgun_message_id`)           | Idempotency                      |
 | `inbound_emails`      | (`recipient_alias`, `received_at` desc) | Per-company intake history       |
+| `inbound_emails`      | (`received_at`) where no order and `review_status = 'pending'` | Review queue; migration `0009` |
 | `orders`              | unique (`inbound_email_id`)             | One order per inbound email      |
 | `job_declines`        | unique (`order_id`, `driver_id`)        | One decline per driver per order |
 | `job_declines`        | (`order_id`)                            | Order card: who declined         |
@@ -410,17 +426,40 @@ RLS is enabled on every table in `public`. Policies are summarised here and spec
 | `company_sites`                    | own company (read, insert) | —                                              | all        |
 | `retailer_stores`                  | read               | read                                                   | all        |
 | `zip_centroids`                    | read               | read                                                   | all        |
-| `orders`                           | own company        | assigned only; open postings via the redacted function | all        |
+| `orders`                           | own company        | assigned only; open postings via `get_open_jobs_for_driver` and `get_job_posting` | all        |
 | `order_items`                      | via order          | via order                                              | all        |
 | `order_status_events`              | via order          | via order                                              | all        |
 | `order_intents`                    | own company (insert, read) | —                                              | all        |
 | `job_declines`                     | —                  | own declines (insert + read)                           | all        |
-| `attachments`                      | via order          | via order                                              | all        |
+| `attachments`                      | `delivery` rows on own orders | via order                                   | all        |
 | `notifications`                    | —                  | —                                                      | all        |
 | `payments`                         | own company (read) | —                                                      | all        |
 | `inbound_emails`, `parse_attempts` | —                  | —                                                      | all        |
 
-Route handlers use the **service role** and bypass RLS deliberately — inbound webhooks have no user context. Those handlers are the only place the service role appears, and they never trust client input.
+The Mailgun webhooks use the **service role** and bypass RLS deliberately — they have no user context. The other uses (admin user management, a dispatcher approving an inbound cart) are listed in [10-auth-and-permissions](10-auth-and-permissions.md#service-role-usage).
+
+---
+
+## SQL functions
+
+Status changes and the writes customers and drivers may make go through these functions. Each one locks the order row (`for update`), checks the caller's role and the order's current status, and writes the change and its `order_status_events` row in one transaction. The checks live inside the functions, not in table constraints. The two exceptions, Send for approval and Undo send, are direct updates from the dispatcher console (see [04-order-lifecycle](04-order-lifecycle.md)).
+
+| Function | Migration | Security | Called by | What it does |
+| --- | --- | --- | --- | --- |
+| `is_dispatcher()`, `is_driver()`, `current_company_id()` | `0001` | definer | RLS policies, functions | Role helpers; all require `profiles.active` |
+| `set_order_number()` | `0005` | trigger | Insert on `orders` | Fills `order_number` as `#` + the next `order_number_seq` value |
+| `finalize_inbound_cart(inbound_email_id, company_id, items, reviewer_id, requester_email, intent_id)` | `0009`, replaced in `0010`, `0012`, `0017` | invoker; `service_role` only | Dispatcher approval (`approveInboundEmail`), `/mime` webhook | Creates the order (`received`), its items (incl. `product_url`), the first status event, claims the intent, links the inbound email. A null `reviewer_id` (`0017`) means a verified retailer email: the event's `source` is `email` and it has no actor. A non-null reviewer must be an active dispatcher |
+| `update_dispatcher_draft(order_id, kind, values)` | `0011`, replaced in `0016` | invoker | Dispatcher review | Saves the store, delivery address + contact, or quote (size, materials, sizing and mileage fees, total) while the order is `received`/`needs_review`. Writes a same-status audit event. Since `0016` the size must be `car` or `truck` |
+| `approve_order(order_id, contact_name, contact_phone, instructions)` | `0012`, replaced in `0013` | definer | Customer, portal | From `awaiting_customer` only. Checks the caller is an active customer of the order's company, and that the order has an address, a store, items and a total above zero. Saves the on-site contact and drop-off instructions, defaults the payout, sets `customer_confirmed_at`, and moves the order to `driver_requested`, writing two events: `awaiting_customer → customer_confirmed` and `customer_confirmed → driver_requested` |
+| `default_driver_payout_cents(sizing, mileage)` | `0013` | immutable | `approve_order` | 90% of sizing fee + mileage fee, rounded. A placeholder rule; the console prefills the same figure in TypeScript (`web/lib/dispatch/payout.ts`) |
+| `set_driver_payout(order_id, payout_cents)` | `0013` | invoker | Dispatcher | Sets the payout from `received` through `driver_requested`; locked once a driver accepts |
+| `get_open_jobs_for_driver()` | `0001`, replaced in `0015` | definer | Driver Jobs page | Lists `driver_requested` orders (store, item count, posted time) the caller has not declined. `0015` added the check that the caller is a driver or dispatcher |
+| `get_job_posting(order_id)` | `0013`, replaced in `0014`, recreated in `0016` | definer | Job link | The posting: payout, store, full delivery address, items, size. Never the on-site contact or drop-off notes. Returns nothing unless the order is posted, is the caller's, or the caller is a dispatcher |
+| `accept_job(order_id)` | `0013` | definer | Driver | First accept wins: a conditional update from `driver_requested` with no driver. Returns `accepted` (also on a retry by the winner) or `taken` |
+| `advance_job(order_id, to_status, photo_path, content_type, size_bytes, skip_reason)` | `0013` | definer | Assigned driver, dispatcher | One step forward: `driver_assigned → driver_at_store → items_purchased → en_route → delivered`. Items purchased and Delivered need a photo already in the `evidence` bucket or a skip reason, and write the `attachments` row. A repeated tap that already landed is success |
+| `release_driver(order_id)` | `0014` | invoker | Dispatcher | From any of `driver_assigned`…`en_route`: clears the driver and moves the order back to `driver_requested`. Photos stay; the payout unlocks |
+
+`definer` functions run with the owner's rights because customers and drivers hold no write policy on `orders`; each one checks the caller explicitly. All pin `search_path`.
 
 ---
 
@@ -438,11 +477,31 @@ Schema changes are **versioned SQL files applied in order** — Flyway-style, no
 | `0002_<change>.sql`             | One incremental change.                                                                          |
 | `0003_<change>.sql`             | …and so on, one file per change, never a bulk re-write of what came before.                       |
 
-`0002_order_intents_and_store_urls.sql` adds `order_intents`, the two `retailer_stores` columns above, and the customer insert policy on `company_sites`. `0003_zip_centroids.sql` adds the ZIP reference table.
+`0002_order_intents_and_store_urls.sql` adds `order_intents`, the two `retailer_stores` columns above, and the customer insert policy on `company_sites`. `0003_zip_centroids.sql` adds the ZIP reference table. The rest:
+
+| File | Change |
+| --- | --- |
+| `0004_parse_attempts_per_tier.sql` | Drops the unique constraint on `parse_attempts.inbound_email_id`: one row per attempt |
+| `0005_order_number_sequence.sql` | `order_number_seq` (from 2000) and the trigger that fills `order_number` (`#2001`) |
+| `0006_order_delivery_size.sql` | `delivery_size` enum and `orders.delivery_size` |
+| `0007_hold_unsent_notifications.sql` | `notifications.send_approved`, default false |
+| `0008_intent_mail_tokens.sql` | `order_intents.email_token`; reserves the `cart-` alias prefix |
+| `0009_inbound_review_and_finalization.sql` | `inbound_emails` review columns and queue index; `finalize_inbound_cart` |
+| `0010_delivery_intent_addresses.sql` | Reserves the `delivery+` prefix; finalization accepts `delivery+<token>` |
+| `0011_dispatcher_draft_updates.sql` | `update_dispatcher_draft` |
+| `0012_customer_approval_and_item_links.sql` | `order_items.product_url`; finalization stores it; `approve_order` |
+| `0013_driver_jobs.sql` | `orders.driver_payout_cents` and the payout functions; approval posts the job; `get_job_posting`, `accept_job`, `advance_job`; nullable `attachments.storage_path`; `evidence` bucket and policies |
+| `0014_posting_details_and_release.sql` | Posting shows full address and items; `release_driver` |
+| `0015_open_jobs_role_check.sql` | `get_open_jobs_for_driver` requires a driver or dispatcher |
+| `0016_car_and_truck.sql` | `delivery_size` becomes `car`/`truck`; existing `pickup` rows become `truck` |
+| `0017_verified_cart_orders.sql` | `finalize_inbound_cart` accepts a null reviewer for verified retailer email |
+| `0018_evidence_driver_delete.sql` | `evidence_driver_delete` storage policy |
 
 Naming is zero-padded four digits plus a short `snake_case` description: `0002_add_order_photos.sql`. The Supabase CLI's own matcher accepts any numeric prefix (`^([0-9]+)_(.*)\.sql$`), so this numbering works both by hand and with `supabase db push`.
 
 Applying them:
+
+The pilot project has had every file applied by hand in the SQL editor, so it has no `db push` history. Keep doing that, or link and push only after recording what is already applied.
 
 ```bash
 # By hand: run each file, in order, in the Supabase SQL editor.
@@ -469,5 +528,5 @@ Reference rows that every environment needs (the `retailer_stores` list) live in
 
 There is still no Home Depot list, so the seeded stores are Lowe's only. The portal derives which retailers to offer from the stores that exist, so seeding Home Depot later is a seed change and not a code change.
 
-The service area is **Upstate SC**, matching the checklist in [11-deployment-and-environments](11-deployment-and-environments.md) and the dry-run checklist. The North Carolina stores stay seeded and active. The dev seed's demo company is still in Charlotte NC — a demo choice only.
+The service area is **Upstate SC**, matching the checklist in [11-deployment-and-environments](11-deployment-and-environments.md). The North Carolina stores stay seeded and active. The dev seed's demo company is still in Charlotte NC — a demo choice only.
 
