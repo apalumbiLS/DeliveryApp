@@ -78,6 +78,22 @@ function SectionCard({
   );
 }
 
+/** A labeled part of a card, set off from the part above it. */
+function DetailRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="mt-3 border-t border-hairline-soft pt-3">
+      <div className="text-[12.5px] text-ink-faint">{label}</div>
+      <div className="mt-0.5 text-[15px] text-ink">{children}</div>
+    </div>
+  );
+}
+
 function CallDispatch() {
   return (
     <a
@@ -398,37 +414,35 @@ function JobView({ job, canAct }: { job: DriverJob; canAct: boolean }) {
           {delivery.street ? <div>{delivery.street}</div> : null}
           {delivery.town ? <div>{delivery.town}</div> : null}
         </div>
-        {size ? (
-          <div className="mt-1 text-[13.5px] text-ink-muted">
-            Vehicle: {size}
-          </div>
-        ) : null}
-        {delivery.contactName || delivery.contactPhone ? (
-          <div className="mt-2 text-[13.5px] text-ink-muted">
-            <span className="text-ink-faint">On-site contact</span>{" "}
-            {delivery.contactName}
-            {delivery.contactPhone ? (
-              <>
-                {delivery.contactName ? " · " : null}
-                <a
-                  href={`tel:${delivery.contactPhone.replace(/[^\d+]/g, "")}`}
-                  className="font-medium text-ink tabular-nums underline decoration-hairline underline-offset-2"
-                >
-                  {formatPhone(delivery.contactPhone)}
-                </a>
-              </>
-            ) : null}
-          </div>
-        ) : null}
-        {delivery.instructions ? (
-          <p className="mt-2 border-t border-hairline-soft pt-2 text-[14px] leading-relaxed text-ink">
-            {delivery.instructions}
-          </p>
-        ) : null}
         <NavigateLink
           className="mt-3"
           query={placeQuery(delivery.street, delivery.town)}
         />
+
+        {delivery.contactName || delivery.contactPhone ? (
+          <DetailRow label="On-site contact">
+            {delivery.contactName ? (
+              <div className="font-medium">{delivery.contactName}</div>
+            ) : null}
+            {delivery.contactPhone ? (
+              <a
+                href={`tel:${delivery.contactPhone.replace(/[^\d+]/g, "")}`}
+                className="inline-flex min-h-11 items-center gap-1.5 font-medium text-accent tabular-nums"
+              >
+                <PhoneIcon className="h-4 w-4" />
+                {formatPhone(delivery.contactPhone)}
+              </a>
+            ) : null}
+          </DetailRow>
+        ) : null}
+
+        {delivery.instructions ? (
+          <DetailRow label="Drop-off notes">
+            <p className="leading-relaxed">{delivery.instructions}</p>
+          </DetailRow>
+        ) : null}
+
+        {size ? <DetailRow label="Vehicle needed">{size}</DetailRow> : null}
       </SectionCard>
 
       <Progress job={job} />
